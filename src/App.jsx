@@ -211,6 +211,36 @@ export default function App() {
     flash(`Scanned ${allEndpoints.length} endpoints`);
   }, [urls]);
 
+  const handleUploadSpecs = useCallback((files) => {
+    setLoading(true);
+    setStatus('Processing uploaded specs...');
+    const allEndpoints = [];
+    let definitions = {};
+    let info = {};
+    let baseUrl = '';
+
+    for (const { name, spec } of files) {
+      if (!spec.openapi && !spec.swagger && !spec.paths) {
+        setStatus(`${name}: not a valid OpenAPI/Swagger spec`);
+        continue;
+      }
+      const parsed = parseSwaggerSpec(spec, name);
+      const apiTitle = parsed.info?.title || name;
+      allEndpoints.push(...parsed.endpoints.map(ep => ({ ...ep, _apiTitle: apiTitle })));
+      definitions = { ...definitions, ...parsed.definitions };
+      info = parsed.info;
+      baseUrl = parsed.baseUrl;
+    }
+
+    const scan = { timestamp: new Date().toISOString(), sourceUrls: files.map(f => `file://${f.name}`), endpoints: allEndpoints, definitions, info, baseUrl };
+    setScanResult(scan);
+    setDiff(null);
+    setScans(prev => [...prev, scan]);
+    saveScan(scan).catch(() => {});
+    setLoading(false);
+    flash(`Loaded ${allEndpoints.length} endpoints from ${files.length} file(s)`);
+  }, []);
+
   const handleSaveCheckpoint = useCallback(async () => {
     if (!scanResult) return;
     const result = await saveCheckpoint(scanResult);
@@ -449,6 +479,7 @@ export default function App() {
             loading={loading}
             onSave={handleSaveUrls}
             onScan={handleScan}
+            onUploadSpecs={handleUploadSpecs}
             onCheckpoint={handleSaveCheckpoint}
             onDiff={handleRunDiff}
             onExport={handleExportPostman}
