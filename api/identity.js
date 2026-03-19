@@ -1,29 +1,17 @@
-import { getDb, json } from './_db.js';
+import { getDb, json, getEmail } from './_db.js';
 
 export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return json(res, {});
-  const db = await getDb();
-  const kv = db.collection('kv');
+  const email = getEmail(req);
 
-  if (req.method === 'GET') {
-    const doc = await kv.findOne({ _id: 'identity' });
-    return json(res, doc?.value ?? {});
-  }
-
-  if (req.method === 'POST') {
-    const { email } = req.body;
-    await kv.updateOne({ _id: 'identity' }, { $set: { value: { email } } }, { upsert: true });
-    return json(res, { ok: true });
-  }
-
-  // DELETE — wipe all user data
-  if (req.method === 'DELETE') {
+  if (req.method === 'DELETE' && email) {
+    const db = await getDb();
     await Promise.all([
-      db.collection('kv').deleteMany({}),
-      db.collection('scans').deleteMany({}),
-      db.collection('checkpoints').deleteMany({}),
-      db.collection('requests').deleteMany({}),
-      db.collection('diffs').deleteMany({}),
+      db.collection('kv').deleteMany({ email }),
+      db.collection('scans').deleteMany({ email }),
+      db.collection('checkpoints').deleteMany({ email }),
+      db.collection('requests').deleteMany({ email }),
+      db.collection('diffs').deleteMany({ email }),
     ]);
     return json(res, { ok: true });
   }

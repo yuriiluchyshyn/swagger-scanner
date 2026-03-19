@@ -81,15 +81,34 @@ export default function App() {
     }, 800);
   }, []);
 
+  // Load identity from localStorage on mount
   useEffect(() => {
     fetchIdentity().then(data => {
       setEmail(data?.email || '');
       setEmailInput(data?.email || '');
     }).catch(() => setEmail(''));
+  }, []);
+
+  // Load all user data when email is set/changed
+  useEffect(() => {
+    if (!email) return;
+    // Reset state before loading
+    setUrls('');
+    setScanResult(null);
+    setScans([]);
+    setEpPayloads({});
+    setEpPathParams({});
+    setEpPathOverrides({});
+    setEpResponses({});
+    setCheckpoint(null);
+    setCheckpoints([]);
+    setDiff(null);
+    setGlobalParams(DEFAULT_GLOBAL_PARAMS);
+    setSwaggerParams({});
+
     fetchUrls().then(data => { if (Array.isArray(data) && data.length) setUrls(data.join('\n')); }).catch(() => {});
     fetchGlobalParams().then(data => {
       if (data && typeof data === 'object' && !data.error && Object.keys(data).length > 0) {
-        // Merge saved params with defaults so new default keys always appear
         setGlobalParams(prev => ({ ...prev, ...data }));
       }
     }).catch(() => {});
@@ -100,26 +119,22 @@ export default function App() {
       if (data?.epPayloads) setEpPayloads(data.epPayloads);
       if (data?.epPathOverrides) setEpPathOverrides(data.epPathOverrides);
     }).catch(() => {});
-    // Load checkpoint list — auto-select the most recent one
     fetchCheckpoints().then(async data => {
       if (!Array.isArray(data) || data.length === 0) return;
       setCheckpoints(data);
-      // Auto-select the last checkpoint
       const last = data[data.length - 1];
       const full = await fetchCheckpoint(last.index);
       setCheckpoint(full);
     }).catch(() => {});
-    // Load scans and auto-restore the last one
     fetchScans().then(data => {
       if (!Array.isArray(data)) return;
       setScans(data);
       if (data.length > 0) {
         const last = data[data.length - 1];
         setScanResult(last);
-        // Don't restore URLs from scan — fetchUrls is the source of truth for the URL list
       }
     }).catch(() => {});
-  }, []);
+  }, [email]);
 
   const flash = (msg) => { setStatus(msg); setTimeout(() => setStatus(''), 2500); };
 

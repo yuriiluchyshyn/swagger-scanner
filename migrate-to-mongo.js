@@ -14,7 +14,11 @@ function readJson(file) {
 async function main() {
   const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017';
   const dbName = process.env.MONGODB_DB || 'swagger-scanner';
+  const email = process.env.USER_EMAIL;
+  if (!email) { console.error('ERROR: Set USER_EMAIL env var (e.g. USER_EMAIL=you@example.com)'); process.exit(1); }
+
   console.log(`Connecting to: ${uri.replace(/\/\/[^@]+@/, '//***@')} → db: ${dbName}`);
+  console.log(`Migrating data for: ${email}`);
   const client = new MongoClient(uri);
   await client.connect();
   const db = client.db(dbName);
@@ -22,7 +26,6 @@ async function main() {
   console.log('Migrating KV data...');
   const kv = db.collection('kv');
   const kvFiles = {
-    'identity': path.join(DATA_DIR, 'identity.json'),
     'urls': path.join(DATA_DIR, 'swagger-urls.json'),
     'global-params': path.join(DATA_DIR, 'global-params.json'),
     'swagger-params': path.join(DATA_DIR, 'swagger-params.json'),
@@ -31,7 +34,7 @@ async function main() {
   for (const [key, file] of Object.entries(kvFiles)) {
     const data = readJson(file);
     if (data !== null) {
-      await kv.updateOne({ _id: key }, { $set: { value: data } }, { upsert: true });
+      await kv.updateOne({ email, key }, { $set: { value: data } }, { upsert: true });
       console.log(`  ✓ ${key}`);
     }
   }
@@ -41,7 +44,7 @@ async function main() {
   const scans = readJson(path.join(DATA_DIR, 'scans.json'));
   if (Array.isArray(scans) && scans.length) {
     for (const scan of scans) {
-      await scansCol.insertOne({ ...scan, createdAt: new Date(scan.timestamp || Date.now()) });
+      await scansCol.insertOne({ ...scan, email, createdAt: new Date(scan.timestamp || Date.now()) });
     }
     console.log(`  ✓ ${scans.length} scans`);
   }
@@ -51,7 +54,7 @@ async function main() {
   const checkpoints = readJson(path.join(DATA_DIR, 'checkpoints.json'));
   if (Array.isArray(checkpoints) && checkpoints.length) {
     for (const cp of checkpoints) {
-      await cpCol.insertOne({ ...cp, createdAt: new Date(cp.timestamp || Date.now()) });
+      await cpCol.insertOne({ ...cp, email, createdAt: new Date(cp.timestamp || Date.now()) });
     }
     console.log(`  ✓ ${checkpoints.length} checkpoints`);
   }
@@ -62,7 +65,7 @@ async function main() {
   const requests = reqData?.requests || (Array.isArray(reqData) ? reqData : []);
   if (requests.length) {
     for (const r of requests) {
-      await reqCol.insertOne(r);
+      await reqCol.insertOne({ ...r, email });
     }
     console.log(`  ✓ ${requests.length} requests`);
   }
@@ -76,7 +79,7 @@ async function main() {
     for (const f of files) {
       const data = readJson(path.join(diffsDir, f));
       if (data) {
-        await diffsCol.insertOne({ ...data, createdAt: new Date(data.timestamp || Date.now()) });
+        await diffsCol.insertOne({ ...data, email, createdAt: new Date(data.timestamp || Date.now()) });
         count++;
       }
     }
