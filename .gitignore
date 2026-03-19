@@ -25,3 +25,9 @@ dist-ssr
 
 # Local data (contains personal tokens, scan results, identity)
 data/
+
+# Environment files
+.env
+.env.local
+.env*.local
+.vercel

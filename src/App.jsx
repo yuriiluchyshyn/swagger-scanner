@@ -48,6 +48,7 @@ export default function App() {
   const [email, setEmail] = useState(null); // null = not loaded yet, '' = no email set
   const [emailInput, setEmailInput] = useState('');
   const [confirmClear, setConfirmClear] = useState(false);
+  const [changingEmail, setChangingEmail] = useState(false);
 
   // Flat value map: param name → value string (global level)
   const globalValues = Object.fromEntries(
@@ -127,6 +128,7 @@ export default function App() {
     if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) return;
     await saveIdentity(trimmed);
     setEmail(trimmed);
+    setChangingEmail(false);
     flash('Email saved');
   }, [emailInput]);
 
@@ -388,13 +390,31 @@ export default function App() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
         <h1 style={{ margin: 0 }}>🔍 Swagger Scanner</h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>👤 {email}</span>
-          {!confirmClear
-            ? <button className="btn-secondary" style={{ fontSize: 12, padding: '3px 10px', color: '#f85149' }} onClick={() => setConfirmClear(true)}>Clear account</button>
+          {!changingEmail
+            ? <>
+                <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>👤 {email}</span>
+                <button className="btn-secondary" style={{ fontSize: 12, padding: '3px 10px' }} onClick={() => { setChangingEmail(true); setEmailInput(email); }}>Change account</button>
+                {!confirmClear
+                  ? <button className="btn-secondary" style={{ fontSize: 12, padding: '3px 10px', color: '#f85149' }} onClick={() => setConfirmClear(true)}>Clear account</button>
+                  : <>
+                      <span style={{ fontSize: 12, color: '#f85149' }}>Are you sure?</span>
+                      <button className="btn-primary" style={{ fontSize: 12, padding: '3px 10px', background: '#f85149', borderColor: '#f85149' }} onClick={handleClearAccount}>Yes, delete all</button>
+                      <button className="btn-secondary" style={{ fontSize: 12, padding: '3px 10px' }} onClick={() => setConfirmClear(false)}>Cancel</button>
+                    </>
+                }
+              </>
             : <>
-                <span style={{ fontSize: 12, color: '#f85149' }}>Are you sure?</span>
-                <button className="btn-primary" style={{ fontSize: 12, padding: '3px 10px', background: '#f85149', borderColor: '#f85149' }} onClick={handleClearAccount}>Yes, delete all</button>
-                <button className="btn-secondary" style={{ fontSize: 12, padding: '3px 10px' }} onClick={() => setConfirmClear(false)}>Cancel</button>
+                <input
+                  type="email"
+                  className="input"
+                  style={{ fontSize: 12, padding: '3px 8px', width: 200 }}
+                  value={emailInput}
+                  onChange={e => setEmailInput(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleSetEmail()}
+                  autoFocus
+                />
+                <button className="btn-primary" style={{ fontSize: 12, padding: '3px 10px' }} onClick={handleSetEmail}>Save</button>
+                <button className="btn-secondary" style={{ fontSize: 12, padding: '3px 10px' }} onClick={() => setChangingEmail(false)}>Cancel</button>
               </>
           }
         </div>
@@ -512,6 +532,7 @@ export default function App() {
           }}
         />
       )}
+
     </div>
   );
 }
