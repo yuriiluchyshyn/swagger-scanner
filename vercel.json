@@ -2,6 +2,12 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/$1" }
+    { "source": "/api/checkpoints/:path*", "destination": "/api/checkpoints" },
+    { "source": "/api/requests/:path*", "destination": "/api/requests" },
+    { "source": "/api/global-params", "destination": "/api/global-params" },
+    { "source": "/api/swagger-params", "destination": "/api/swagger-params" },
+    { "source": "/api/fetch-spec", "destination": "/api/fetch-spec" },
+    { "source": "/api/export-postman", "destination": "/api/export-postman" },
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }
