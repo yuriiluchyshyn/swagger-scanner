@@ -1,21 +1,17 @@
-import { getDb, ensureTables, json } from './_db.js';
+import { getDb, json } from './_db.js';
 
 export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return json(res, {});
-  await ensureTables();
-  const sql = getDb();
+  const db = await getDb();
+  const kv = db.collection('kv');
 
   if (req.method === 'GET') {
-    const rows = await sql`SELECT value FROM kv WHERE key = 'urls'`;
-    return json(res, rows[0]?.value ?? []);
+    const doc = await kv.findOne({ _id: 'urls' });
+    return json(res, doc?.value ?? []);
   }
 
   if (req.method === 'POST') {
-    const body = req.body;
-    await sql`
-      INSERT INTO kv (key, value) VALUES ('urls', ${JSON.stringify(body)}::jsonb)
-      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
-    `;
+    await kv.updateOne({ _id: 'urls' }, { $set: { value: req.body } }, { upsert: true });
     return json(res, { ok: true });
   }
 

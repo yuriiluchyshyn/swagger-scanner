@@ -1,31 +1,30 @@
-import { getDb, ensureTables, json } from './_db.js';
+import { getDb, json } from './_db.js';
 
 export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return json(res, {});
-  await ensureTables();
-  const sql = getDb();
+  const db = await getDb();
+  const kv = db.collection('kv');
 
   if (req.method === 'GET') {
-    const rows = await sql`SELECT value FROM kv WHERE key = 'identity'`;
-    return json(res, rows[0]?.value ?? {});
+    const doc = await kv.findOne({ _id: 'identity' });
+    return json(res, doc?.value ?? {});
   }
 
   if (req.method === 'POST') {
     const { email } = req.body;
-    await sql`
-      INSERT INTO kv (key, value) VALUES ('identity', ${JSON.stringify({ email })}::jsonb)
-      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
-    `;
+    await kv.updateOne({ _id: 'identity' }, { $set: { value: { email } } }, { upsert: true });
     return json(res, { ok: true });
   }
 
   // DELETE — wipe all user data
   if (req.method === 'DELETE') {
-    await sql`DELETE FROM kv`;
-    await sql`DELETE FROM scans`;
-    await sql`DELETE FROM checkpoints`;
-    await sql`DELETE FROM requests`;
-    await sql`DELETE FROM diffs`;
+    await Promise.all([
+      db.collection('kv').deleteMany({}),
+      db.collection('scans').deleteMany({}),
+      db.collection('checkpoints').deleteMany({}),
+      db.collection('requests').deleteMany({}),
+      db.collection('diffs').deleteMany({}),
+    ]);
     return json(res, { ok: true });
   }
 

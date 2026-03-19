@@ -1,13 +1,13 @@
-import { getDb, ensureTables, json } from './_db.js';
+import { getDb, json } from './_db.js';
 
 export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return json(res, {});
-  await ensureTables();
-  const sql = getDb();
+  const db = await getDb();
+  const col = db.collection('requests');
 
   const parts = req.url.split('?')[0].split('/').filter(Boolean);
-  const idStr = parts[parts.length - 1];
-  const isById = idStr !== 'requests';
+  const lastPart = parts[parts.length - 1];
+  const isById = lastPart !== 'requests';
 
   // GET /api/requests
   if (req.method === 'GET' && !isById) {
@@ -16,20 +16,14 @@ export default async function handler(req, res) {
     const pinned = searchParams.get('pinned') === 'true';
     const limit = parseInt(searchParams.get('limit') || '0');
 
-    let rows;
-    if (key && pinned) {
-      rows = await sql`SELECT data FROM requests WHERE key = ${key} AND pinned = TRUE ORDER BY saved_at DESC`;
-    } else if (key) {
-      rows = await sql`SELECT data FROM requests WHERE key = ${key} ORDER BY saved_at DESC`;
-    } else if (pinned) {
-      rows = await sql`SELECT data FROM requests WHERE pinned = TRUE ORDER BY saved_at DESC`;
-    } else {
-      rows = await sql`SELECT data FROM requests ORDER BY saved_at DESC`;
-    }
+    const filter = {};
+    if (key) filter.key = key;
+    if (pinned) filter.pinned = true;
 
-    let results = rows.map(r => r.data);
-    if (limit > 0) results = results.slice(0, limit);
-    return json(res, results);
+    let cursor = col.find(filter, { sort: { savedAt: -1 } });
+    if (limit > 0) cursor = cursor.limit(limit);
+    const docs = await cursor.toArray();
+    return json(res, docs.map(({ _id, ...rest }) => rest));
   }
 
   // POST /api/requests
@@ -51,28 +45,23 @@ export default async function handler(req, res) {
       pinned: body.pinned || false,
       savedAt: new Date().toISOString(),
     };
-    await sql`
-      INSERT INTO requests (id, key, data, pinned, saved_at)
-      VALUES (${id}, ${entry.key}, ${JSON.stringify(entry)}::jsonb, ${entry.pinned}, NOW())
-    `;
+    await col.insertOne(entry);
     return json(res, { ok: true, id });
   }
 
   // PATCH /api/requests/:id
   if (req.method === 'PATCH' && isById) {
     const body = req.body;
-    const rows = await sql`SELECT data FROM requests WHERE id = ${idStr}`;
-    if (!rows[0]) return json(res, { error: 'Not found' }, 404);
-    const entry = { ...rows[0].data };
-    if (body.pinned !== undefined) entry.pinned = body.pinned;
-    if (body.label !== undefined) entry.label = body.label;
-    await sql`UPDATE requests SET data = ${JSON.stringify(entry)}::jsonb, pinned = ${entry.pinned} WHERE id = ${idStr}`;
+    const update = {};
+    if (body.pinned !== undefined) update.pinned = body.pinned;
+    if (body.label !== undefined) update.label = body.label;
+    await col.updateOne({ id: lastPart }, { $set: update });
     return json(res, { ok: true });
   }
 
   // DELETE /api/requests/:id
   if (req.method === 'DELETE' && isById) {
-    await sql`DELETE FROM requests WHERE id = ${idStr}`;
+    await col.deleteOne({ id: lastPart });
     return json(res, { ok: true });
   }
 
