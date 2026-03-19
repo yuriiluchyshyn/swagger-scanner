@@ -514,30 +514,39 @@ export default function App() {
             checkpoint={checkpoint}
           />
         </div>
-        <button
-          className="btn-secondary"
-          style={{ marginTop: 12, whiteSpace: 'nowrap' }}
-          onClick={() => setShowSettings(s => !s)}
-        >
-          ⚙️ Global Params {Object.keys(globalParams).length > 0 && `(${Object.keys(globalParams).length})`}
-        </button>
-      </div>
-
-      <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-        <button className="btn-secondary" onClick={() => fileInputRef.current?.click()} disabled={loading}>
-          📁 Upload Swagger JSON
-        </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".json,application/json"
-          multiple
-          style={{ display: 'none' }}
-          onChange={handleFileInput}
-        />
-        <button className="btn-secondary" onClick={() => setShowJsonPaste(s => !s)} disabled={loading}>
-          📋 Add Swagger JSON
-        </button>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 12 }}>
+          <button
+            className="btn-secondary"
+            style={{ whiteSpace: 'nowrap' }}
+            onClick={() => fileInputRef.current?.click()}
+            disabled={loading}
+          >
+            📁 Upload Swagger JSON
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json,application/json"
+            multiple
+            style={{ display: 'none' }}
+            onChange={handleFileInput}
+          />
+          <button
+            className="btn-secondary"
+            style={{ whiteSpace: 'nowrap' }}
+            onClick={() => setShowJsonPaste(s => !s)}
+            disabled={loading}
+          >
+            📋 Add Swagger JSON
+          </button>
+          <button
+            className="btn-secondary"
+            style={{ whiteSpace: 'nowrap' }}
+            onClick={() => setShowSettings(s => !s)}
+          >
+            ⚙️ Global Params {Object.keys(globalParams).length > 0 && `(${Object.keys(globalParams).length})`}
+          </button>
+        </div>
       </div>
 
       {showJsonPaste && (
