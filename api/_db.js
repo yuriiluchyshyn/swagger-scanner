@@ -7,7 +7,7 @@ export async function getDb() {
   if (db) return db;
   client = new MongoClient(process.env.MONGODB_URI);
   await client.connect();
-  db = client.db(process.env.MONGODB_DB || 'swagger-scanner');
+  db = client.db();
   return db;
 }
 

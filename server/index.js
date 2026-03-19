@@ -1,8 +1,7 @@
 import http from 'http';
 import { MongoClient } from 'mongodb';
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017';
-const MONGODB_DB = process.env.MONGODB_DB || 'swagger-scanner';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/swagger-scanner';
 
 let db;
 
@@ -10,8 +9,8 @@ async function getDb() {
   if (db) return db;
   const client = new MongoClient(MONGODB_URI);
   await client.connect();
-  db = client.db(MONGODB_DB);
-  console.log(`Connected to MongoDB: ${MONGODB_DB}`);
+  db = client.db();
+  console.log(`Connected to MongoDB`);
   return db;
 }
 

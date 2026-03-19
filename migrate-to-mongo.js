@@ -12,16 +12,15 @@ function readJson(file) {
 }
 
 async function main() {
-  const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017';
-  const dbName = process.env.MONGODB_DB || 'swagger-scanner';
+  const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/swagger-scanner';
   const email = process.env.USER_EMAIL;
   if (!email) { console.error('ERROR: Set USER_EMAIL env var (e.g. USER_EMAIL=you@example.com)'); process.exit(1); }
 
-  console.log(`Connecting to: ${uri.replace(/\/\/[^@]+@/, '//***@')} → db: ${dbName}`);
+  console.log(`Connecting to: ${uri.replace(/\/\/[^@]+@/, '//***@')}`);
   console.log(`Migrating data for: ${email}`);
   const client = new MongoClient(uri);
   await client.connect();
-  const db = client.db(dbName);
+  const db = client.db();
 
   console.log('Migrating KV data...');
   const kv = db.collection('kv');
