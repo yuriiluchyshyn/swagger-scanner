@@ -49,6 +49,9 @@ export default function App() {
   const [emailInput, setEmailInput] = useState('');
   const [confirmClear, setConfirmClear] = useState(false);
   const [changingEmail, setChangingEmail] = useState(false);
+  const [showJsonPaste, setShowJsonPaste] = useState(false);
+  const [jsonPasteValue, setJsonPasteValue] = useState('');
+  const fileInputRef = useRef(null);
 
   // Flat value map: param name → value string (global level)
   const globalValues = Object.fromEntries(
@@ -240,6 +243,31 @@ export default function App() {
     setLoading(false);
     flash(`Loaded ${allEndpoints.length} endpoints from ${files.length} file(s)`);
   }, []);
+
+  const handleFileInput = useCallback((e) => {
+    const files = Array.from(e.target.files);
+    if (!files.length) return;
+    const readers = files.map(f => new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => { try { resolve({ name: f.name, spec: JSON.parse(reader.result) }); } catch { reject(new Error(`${f.name} is not valid JSON`)); } };
+      reader.onerror = reject;
+      reader.readAsText(f);
+    }));
+    Promise.all(readers).then(specs => handleUploadSpecs(specs)).catch(err => flash(err.message));
+    e.target.value = '';
+  }, [handleUploadSpecs]);
+
+  const handleJsonPasteSubmit = useCallback(() => {
+    const trimmed = jsonPasteValue.trim();
+    if (!trimmed) return;
+    try {
+      const spec = JSON.parse(trimmed);
+      if (!spec.openapi && !spec.swagger && !spec.paths) { flash('Not a valid OpenAPI/Swagger spec'); return; }
+      handleUploadSpecs([{ name: spec.info?.title || 'Pasted Spec', spec }]);
+      setJsonPasteValue('');
+      setShowJsonPaste(false);
+    } catch { flash('Invalid JSON'); }
+  }, [jsonPasteValue, handleUploadSpecs]);
 
   const handleSaveCheckpoint = useCallback(async () => {
     if (!scanResult) return;
@@ -479,7 +507,6 @@ export default function App() {
             loading={loading}
             onSave={handleSaveUrls}
             onScan={handleScan}
-            onUploadSpecs={handleUploadSpecs}
             onCheckpoint={handleSaveCheckpoint}
             onDiff={handleRunDiff}
             onExport={handleExportPostman}
@@ -495,6 +522,44 @@ export default function App() {
           ⚙️ Global Params {Object.keys(globalParams).length > 0 && `(${Object.keys(globalParams).length})`}
         </button>
       </div>
+
+      <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+        <button className="btn-secondary" onClick={() => fileInputRef.current?.click()} disabled={loading}>
+          📁 Upload Swagger JSON
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".json,application/json"
+          multiple
+          style={{ display: 'none' }}
+          onChange={handleFileInput}
+        />
+        <button className="btn-secondary" onClick={() => setShowJsonPaste(s => !s)} disabled={loading}>
+          📋 Add Swagger JSON
+        </button>
+      </div>
+
+      {showJsonPaste && (
+        <div className="card mb-4">
+          <h3 style={{ margin: '0 0 8px' }}>Paste Swagger/OpenAPI JSON</h3>
+          <textarea
+            rows={8}
+            placeholder='Paste your Swagger/OpenAPI JSON spec here...'
+            value={jsonPasteValue}
+            onChange={e => setJsonPasteValue(e.target.value)}
+            style={{ fontFamily: 'monospace', fontSize: 12 }}
+          />
+          <div className="flex gap-2 mt-2">
+            <button className="btn-primary" onClick={handleJsonPasteSubmit} disabled={!jsonPasteValue.trim()}>
+              Parse & Load
+            </button>
+            <button className="btn-secondary" onClick={() => { setShowJsonPaste(false); setJsonPasteValue(''); }}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {showSettings && (
         <GlobalParams globalParams={globalParams} onSave={handleSaveGlobalParams} />
