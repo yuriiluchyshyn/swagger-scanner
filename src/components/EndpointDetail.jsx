@@ -2,6 +2,53 @@ import { useState, useCallback } from 'react';
 import { fetchRequests, patchRequest, deleteRequest } from '../api/client.js';
 import { generateValue } from '../helpers.js';
 
+// Collapsible JSON node
+function JsonNode({ data, depth = 0 }) {
+  const [collapsed, setCollapsed] = useState(depth > 1);
+  const indent = depth * 14;
+
+  if (data === null) return <span style={{ color: '#79c0ff' }}>null</span>;
+  if (typeof data === 'boolean') return <span style={{ color: '#79c0ff' }}>{String(data)}</span>;
+  if (typeof data === 'number') return <span style={{ color: '#79c0ff' }}>{data}</span>;
+  if (typeof data === 'string') return <span style={{ color: '#a5d6ff' }}>"{data}"</span>;
+
+  const isArray = Array.isArray(data);
+  const entries = isArray ? data.map((v, i) => [i, v]) : Object.entries(data);
+  const open = isArray ? '[' : '{';
+  const close = isArray ? ']' : '}';
+  const label = isArray ? `Array(${entries.length})` : `{${entries.length}}`;
+
+  if (entries.length === 0) return <span style={{ color: '#8b949e' }}>{open}{close}</span>;
+
+  return (
+    <span>
+      <button
+        onClick={() => setCollapsed(c => !c)}
+        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', color: '#8b949e', fontSize: 11, lineHeight: 1 }}
+      >{collapsed ? '▶' : '▼'}</button>
+      <span style={{ color: '#8b949e' }}>{open}</span>
+      {collapsed ? (
+        <span
+          style={{ color: '#8b949e', cursor: 'pointer', fontSize: 11 }}
+          onClick={() => setCollapsed(false)}
+        > {label} </span>
+      ) : (
+        <div style={{ marginLeft: indent + 14 }}>
+          {entries.map(([k, v], i) => (
+            <div key={k}>
+              {!isArray && <span style={{ color: '#ff7b72' }}>"{k}"</span>}
+              {!isArray && <span style={{ color: '#8b949e' }}>: </span>}
+              <JsonNode data={v} depth={depth + 1} />
+              {i < entries.length - 1 && <span style={{ color: '#8b949e' }}>,</span>}
+            </div>
+          ))}
+        </div>
+      )}
+      {!collapsed && <span style={{ color: '#8b949e' }}>{close}</span>}
+    </span>
+  );
+}
+
 // Build a schema-based example object (like Swagger UI "Example Value")
 function buildSchemaExample(schema, definitions) {
   if (!schema) return null;
@@ -321,7 +368,29 @@ export default function EndpointDetail({
             </h3>
             <button className="btn-secondary" onClick={onClearResponse}>Clear</button>
           </div>
-          <pre>{typeof epResponse.data === 'object' ? JSON.stringify(epResponse.data, null, 2) : (epResponse.error || epResponse.data)}</pre>
+          <div
+            style={{
+              resize: 'vertical',
+              overflow: 'auto',
+              minHeight: 80,
+              maxHeight: 600,
+              height: 220,
+              background: 'var(--bg-secondary)',
+              border: '1px solid var(--border)',
+              borderRadius: 6,
+              padding: '10px 14px',
+              fontFamily: 'monospace',
+              fontSize: 12,
+              lineHeight: 1.6,
+            }}
+          >
+            {epResponse.error
+              ? <span style={{ color: '#f85149' }}>{epResponse.error}</span>
+              : typeof epResponse.data === 'object'
+                ? <JsonNode data={epResponse.data} depth={0} />
+                : <span style={{ color: '#a5d6ff' }}>{String(epResponse.data)}</span>
+            }
+          </div>
         </div>
       )}
     </div>
