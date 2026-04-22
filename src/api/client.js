@@ -2,15 +2,15 @@ const BASE = '/api';
 
 // Email is stored in localStorage and sent with every request
 export function getStoredEmail() {
-  return localStorage.getItem('swagger-scanner-email') || '';
+  return localStorage.getItem('open-api-scanner-email') || '';
 }
 
 export function setStoredEmail(email) {
-  localStorage.setItem('swagger-scanner-email', email);
+  localStorage.setItem('open-api-scanner-email', email);
 }
 
 export function clearStoredEmail() {
-  localStorage.removeItem('swagger-scanner-email');
+  localStorage.removeItem('open-api-scanner-email');
 }
 
 function authHeaders(extra = {}) {

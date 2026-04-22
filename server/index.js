@@ -1,7 +1,7 @@
 import http from 'http';
 import { MongoClient } from 'mongodb';
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/swagger-scanner';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/open-api-scanner';
 
 let db;
 
@@ -72,7 +72,7 @@ function convertToPostman(name, scan) {
     if (ep.requestBody) { const jc = ep.requestBody.content?.['application/json']; if (jc) { item.request.body = { mode: 'raw', raw: JSON.stringify(jc.schema || {}, null, 2), options: { raw: { language: 'json' } } }; item.request.header.push({ key: 'Content-Type', value: 'application/json' }); } }
     items.push(item);
   }
-  return { info: { name: name || 'Swagger Scanner Export', schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json' }, item: items };
+  return { info: { name: name || 'Open API Scanner Export', schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json' }, item: items };
 }
 
 const server = http.createServer(async (req, res) => {
@@ -291,4 +291,4 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(3001, () => console.log('Server running on http://localhost:3001'));
+server.listen(3002, () => console.log('Server running on http://localhost:3002'));

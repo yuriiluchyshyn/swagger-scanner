@@ -35,6 +35,7 @@ export default function App() {
   const [epPayloads, setEpPayloads] = useState({});
   const [epPathParams, setEpPathParams] = useState({});
   const [epPathOverrides, setEpPathOverrides] = useState({});
+  const [epParamOverrides, setEpParamOverrides] = useState({}); // per-endpoint non-path param overrides
   const [epResponses, setEpResponses] = useState({});
   const [checkpoint, setCheckpoint] = useState(null);
   const [checkpoints, setCheckpoints] = useState([]); // list of checkpoint metadata
@@ -438,7 +439,7 @@ export default function App() {
   // No email set — show gate
   if (!email) return (
     <div className="container" style={{ maxWidth: 420, marginTop: 80 }}>
-      <h1>🔍 Swagger Scanner</h1>
+      <h1>🔍 Open API Scanner</h1>
       <div className="card" style={{ marginTop: 24 }}>
         <p style={{ marginBottom: 12, color: 'var(--text-secondary)' }}>Enter your email to get started. No password needed.</p>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -461,7 +462,7 @@ export default function App() {
   return (
     <div className="container">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-        <h1 style={{ margin: 0 }}>🔍 Swagger Scanner</h1>
+        <h1 style={{ margin: 0 }}>🔍 Open API Scanner</h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {!changingEmail
             ? <>

@@ -37,7 +37,7 @@ function convertToPostman(name, scan) {
     items.push(item);
   }
   return {
-    info: { name: name || 'Swagger Scanner Export', schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json' },
+    info: { name: name || 'Open API Scanner Export', schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json' },
     item: items,
   };
 }

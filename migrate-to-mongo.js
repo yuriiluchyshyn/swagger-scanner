@@ -12,7 +12,7 @@ function readJson(file) {
 }
 
 async function main() {
-  const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/swagger-scanner';
+  const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/open-api-scanner';
   const email = process.env.USER_EMAIL;
   if (!email) { console.error('ERROR: Set USER_EMAIL env var (e.g. USER_EMAIL=you@example.com)'); process.exit(1); }
 
