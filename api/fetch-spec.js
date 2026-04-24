@@ -40,24 +40,56 @@ async function resolveSpecUrl(inputUrl) {
 }
 
 export default async function handler(req, res) {
-  if (req.method === 'OPTIONS') return json(res, {});
-  const { searchParams } = new URL(req.url, 'http://localhost');
-  const inputUrl = searchParams.get('url');
-  if (!inputUrl) return json(res, { error: 'Missing url param' }, 400);
-
-  const specUrl = await resolveSpecUrl(inputUrl);
   try {
-    const resp = await fetch(specUrl, { headers: { Accept: 'application/json' } });
-    const text = await resp.text();
-    let data;
-    try { data = JSON.parse(text); } catch {
-      return json(res, { error: `URL did not return valid JSON. Resolved: ${specUrl}` }, 400);
+    if (req.method === 'OPTIONS') return json(res, {});
+    
+    const { searchParams } = new URL(req.url, 'http://localhost');
+    const inputUrl = searchParams.get('url');
+    if (!inputUrl) return json(res, { error: 'Missing url param' }, 400);
+
+    console.log(`Fetching spec from: ${inputUrl}`);
+    
+    const specUrl = await resolveSpecUrl(inputUrl);
+    console.log(`Resolved spec URL: ${specUrl}`);
+    
+    // Add timeout to prevent hanging requests
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+    
+    try {
+      const resp = await fetch(specUrl, { 
+        headers: { Accept: 'application/json' },
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+      
+      if (!resp.ok) {
+        return json(res, { error: `HTTP ${resp.status}: ${resp.statusText}` }, 400);
+      }
+      
+      const text = await resp.text();
+      let data;
+      try { 
+        data = JSON.parse(text); 
+      } catch {
+        return json(res, { error: `URL did not return valid JSON. Resolved: ${specUrl}` }, 400);
+      }
+      
+      if (!data.openapi && !data.swagger && !data.paths) {
+        return json(res, { error: `Response doesn't appear to be an OpenAPI/Swagger spec. Resolved: ${specUrl}` }, 400);
+      }
+      
+      console.log(`Successfully fetched spec with ${Object.keys(data.paths || {}).length} paths`);
+      return json(res, data);
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      if (fetchError.name === 'AbortError') {
+        return json(res, { error: 'Request timeout after 10 seconds' }, 408);
+      }
+      throw fetchError;
     }
-    if (!data.openapi && !data.swagger && !data.paths) {
-      return json(res, { error: `Response doesn't appear to be an OpenAPI/Swagger spec. Resolved: ${specUrl}` }, 400);
-    }
-    return json(res, data);
   } catch (e) {
+    console.error(`Fetch spec error: ${e.message}`);
     return json(res, { error: e.message }, 500);
   }
 }

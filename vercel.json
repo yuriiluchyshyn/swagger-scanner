@@ -26,6 +26,7 @@
     { "source": "/api/urls", "destination": "/api/urls" },
     { "source": "/api/session", "destination": "/api/session" },
     { "source": "/api/identity", "destination": "/api/identity" },
+    { "source": "/api/health", "destination": "/api/health" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }
