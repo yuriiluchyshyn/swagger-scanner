@@ -112,15 +112,26 @@ export async function fetchSpec(url, corsSettings = {}) {
   const globalMode = corsSettings.globalMode || 'browser-first';
   const blockedDomains = corsSettings.blockedDomains || [];
   
+  console.log('=== FETCHSPEC DEBUG ===');
+  console.log('URL:', url);
+  console.log('Global mode:', globalMode);
+  console.log('Blocked domains:', blockedDomains);
+  
   // Check if domain is blocked or global mode is server-only
   const shouldSkipBrowser = globalMode === 'server-only' || 
     blockedDomains.some(domain => {
       if (domain.startsWith('*.')) {
         const pattern = domain.substring(2);
-        return url.includes(pattern);
+        const matches = url.includes(pattern);
+        console.log(`Checking wildcard "${domain}" (pattern: "${pattern}") against URL: ${matches}`);
+        return matches;
       }
-      return url.includes(domain);
+      const matches = url.includes(domain);
+      console.log(`Checking domain "${domain}" against URL: ${matches}`);
+      return matches;
     });
+
+  console.log('Should skip browser:', shouldSkipBrowser);
 
   if (shouldSkipBrowser) {
     console.log('Skipping browser fetch due to CORS settings, using server proxy...');
