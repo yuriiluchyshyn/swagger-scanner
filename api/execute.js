@@ -45,8 +45,15 @@ export default async function handler(req, res) {
 
   try {
     console.log(`Executing request: ${method.toUpperCase()} ${url}`);
+    console.log('Request will be made with options:', JSON.stringify({
+      method: opts.method,
+      headers: opts.headers,
+      bodyLength: opts.body ? opts.body.length : 0
+    }, null, 2));
+    
     const resp = await fetch(url, opts);
-    console.log(`Response status: ${resp.status} ${resp.statusText}`);
+    console.log(`Response received - status: ${resp.status} ${resp.statusText}`);
+    console.log('Response headers:', JSON.stringify(Object.fromEntries(resp.headers.entries()), null, 2));
     
     const contentType = resp.headers.get('content-type') || '';
     console.log('Response content-type:', contentType);
@@ -55,9 +62,11 @@ export default async function handler(req, res) {
     if (contentType.includes('json')) {
       console.log('Parsing JSON response...');
       data = await resp.json();
+      console.log('JSON response parsed successfully');
     } else {
       console.log('Reading text response...');
       data = await resp.text();
+      console.log(`Text response length: ${data.length} characters`);
     }
     
     const result = { 
@@ -68,12 +77,35 @@ export default async function handler(req, res) {
     };
     
     console.log(`=== EXECUTE SUCCESS ===`);
-    console.log('Response data length:', typeof data === 'string' ? data.length : JSON.stringify(data).length);
+    console.log('Response data type:', typeof data);
     return json(res, result);
   } catch (e) {
     console.error(`=== EXECUTE ERROR ===`);
+    console.error('Error name:', e.name);
     console.error('Error message:', e.message);
+    console.error('Error code:', e.code);
+    console.error('Error cause:', e.cause);
+    console.error('Full error object:', JSON.stringify(e, Object.getOwnPropertyNames(e), 2));
     console.error('Error stack:', e.stack);
-    return json(res, { error: e.message, details: e.stack }, 500);
+    
+    // Provide more specific error messages based on error type
+    let errorMessage = e.message;
+    if (e.name === 'TypeError' && e.message.includes('fetch')) {
+      errorMessage = `Network error: Unable to connect to ${url}. This could be due to network restrictions, DNS issues, or the server being unreachable from Vercel's infrastructure.`;
+    } else if (e.code === 'ENOTFOUND') {
+      errorMessage = `DNS resolution failed for ${url}. The domain may not exist or be unreachable.`;
+    } else if (e.code === 'ECONNREFUSED') {
+      errorMessage = `Connection refused by ${url}. The server may be down or blocking connections.`;
+    } else if (e.code === 'ETIMEDOUT') {
+      errorMessage = `Request timeout to ${url}. The server is taking too long to respond.`;
+    }
+    
+    return json(res, { 
+      error: errorMessage,
+      originalError: e.message,
+      errorType: e.name,
+      errorCode: e.code,
+      url: url
+    }, 500);
   }
 }
