@@ -4,21 +4,32 @@ let client = null;
 let db = null;
 
 export async function getDb() {
-  if (db) return db;
+  console.log('getDb() called');
+  if (db) {
+    console.log('Returning existing DB connection');
+    return db;
+  }
   
   const mongoUri = process.env.MONGODB_URI;
+  console.log('MongoDB URI status:', mongoUri ? 'present' : 'missing');
+  
   if (!mongoUri) {
+    console.error('MONGODB_URI environment variable is not set');
     throw new Error('MONGODB_URI environment variable is not set. Please configure it in Vercel dashboard.');
   }
   
   try {
+    console.log('Creating new MongoDB client...');
     client = new MongoClient(mongoUri);
+    console.log('Connecting to MongoDB...');
     await client.connect();
+    console.log('MongoDB connection established');
     db = client.db();
-    console.log('Connected to MongoDB successfully');
+    console.log('Database instance created successfully');
     return db;
   } catch (error) {
     console.error('MongoDB connection failed:', error.message);
+    console.error('Full error:', error);
     throw new Error(`MongoDB connection failed: ${error.message}`);
   }
 }
