@@ -124,10 +124,18 @@ export default function App() {
       if (data && typeof data === 'object' && !data.error) setSwaggerParams(data);
     }).catch(() => {});
     fetchCorsSettings().then(data => {
+      console.log('=== CORS SETTINGS LOADED ===');
+      console.log('Raw data from server:', data);
       if (data && typeof data === 'object' && !data.error) {
-        setCorsSettings(prev => ({ ...prev, ...data }));
+        const newSettings = { ...{ globalMode: 'browser-first', blockedDomains: [] }, ...data };
+        console.log('Setting corsSettings to:', newSettings);
+        setCorsSettings(newSettings);
+      } else {
+        console.log('Using default CORS settings');
       }
-    }).catch(() => {});
+    }).catch(err => {
+      console.log('Error loading CORS settings:', err);
+    });
     fetchSession().then(data => {
       if (data?.epPayloads) setEpPayloads(data.epPayloads);
       if (data?.epPathOverrides) setEpPathOverrides(data.epPathOverrides);
@@ -207,6 +215,8 @@ export default function App() {
 
     for (const url of list) {
       try {
+        console.log('=== APP.JSX DEBUG ===');
+        console.log('corsSettings being passed to fetchSpec:', corsSettings);
         const spec = await fetchSpec(url, corsSettings);
         if (spec.error) { setStatus(`Error: ${spec.error}`); continue; }
         const parsed = parseSwaggerSpec(spec, url);
