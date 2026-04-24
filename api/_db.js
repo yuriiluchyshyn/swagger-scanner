@@ -3,11 +3,6 @@ import { MongoClient } from 'mongodb';
 let client = null;
 let db = null;
 
-import { MongoClient } from 'mongodb';
-
-let client = null;
-let db = null;
-
 export async function getDb() {
   if (db) return db;
   
