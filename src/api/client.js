@@ -100,12 +100,78 @@ export async function saveDiff(diff) {
 // --- Utils (combined: execute, fetch-spec, export-postman) ---
 
 export async function fetchSpec(url) {
+  // Helper function to resolve spec URL from Swagger UI pages
+  async function resolveSpecUrlBrowser(inputUrl) {
+    const cleanUrl = inputUrl.split('#')[0].split('%23')[0];
+    
+    // First try the URL directly
+    try {
+      const resp = await fetch(cleanUrl, { 
+        headers: { 'Accept': 'application/json' },
+        mode: 'cors'
+      });
+      if (resp.ok) {
+        const text = await resp.text();
+        try { 
+          const j = JSON.parse(text); 
+          if (j.openapi || j.swagger || j.paths) return cleanUrl; 
+        } catch {}
+      }
+    } catch {}
+    
+    // If direct fetch failed, generate candidates
+    const parsed = new URL(cleanUrl);
+    const base = `${parsed.protocol}//${parsed.host}`;
+    const pathStr = parsed.pathname.replace(/\/$/, '');
+    const candidates = [];
+    
+    // Handle Swagger UI URLs
+    if (pathStr.includes('swagger-ui')) {
+      const idx = pathStr.indexOf('/swagger-ui');
+      const parent = pathStr.substring(0, idx);
+      if (parent) {
+        candidates.push(
+          `${base}${parent}`,
+          `${base}${parent}/api-docs`,
+          `${base}${parent}/openapi.json`,
+          `${base}${parent}/swagger.json`
+        );
+      }
+    }
+    
+    // Common API spec endpoints
+    candidates.push(
+      `${base}/v3/api-docs`,
+      `${base}/v2/api-docs`, 
+      `${base}/swagger.json`,
+      `${base}/openapi.json`,
+      `${base}/api-docs`,
+      `${base}/docs`
+    );
+    
+    // Try each candidate
+    for (const candidate of candidates) {
+      try {
+        const resp = await fetch(candidate, { 
+          headers: { 'Accept': 'application/json' },
+          mode: 'cors'
+        });
+        if (!resp.ok) continue;
+        const j = await resp.json();
+        if (j.openapi || j.swagger || j.paths) return candidate;
+      } catch {}
+    }
+    
+    return cleanUrl; // Return original if no candidates work
+  }
+
   // Try direct browser request first (like Postman web)
   try {
     console.log('Attempting direct browser spec fetch...');
-    const cleanUrl = url.split('#')[0];
+    const resolvedUrl = await resolveSpecUrlBrowser(url);
+    console.log(`Resolved URL: ${resolvedUrl}`);
     
-    const resp = await fetch(cleanUrl, { 
+    const resp = await fetch(resolvedUrl, { 
       method: 'GET',
       headers: { 
         'Accept': 'application/json, text/plain, */*',
