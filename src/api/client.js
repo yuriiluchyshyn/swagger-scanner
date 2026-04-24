@@ -74,8 +74,44 @@ export async function fetchSpec(url) {
 }
 
 export async function executeRequest({ url, method, headers, body }) {
-  const r = await fetch(`${BASE}/execute`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ url, method, headers, body }) });
-  return r.json();
+  // Try direct browser request first (like Postman web)
+  try {
+    console.log('Attempting direct browser request...');
+    const opts = { 
+      method: method.toUpperCase(), 
+      headers: headers || {},
+      mode: 'cors' // Enable CORS
+    };
+    
+    if (body && method.toUpperCase() !== 'GET') {
+      opts.body = JSON.stringify(body);
+      opts.headers['Content-Type'] = opts.headers['Content-Type'] || 'application/json';
+    }
+    
+    const resp = await fetch(url, opts);
+    const contentType = resp.headers.get('content-type') || '';
+    const data = contentType.includes('json') ? await resp.json() : await resp.text();
+    
+    return {
+      status: resp.status,
+      statusText: resp.statusText,
+      headers: Object.fromEntries(resp.headers.entries()),
+      data,
+      source: 'browser-direct'
+    };
+  } catch (directError) {
+    console.log('Direct browser request failed:', directError.message);
+    
+    // Fallback to server proxy
+    console.log('Falling back to server proxy...');
+    const r = await fetch(`${BASE}/execute`, { 
+      method: 'POST', 
+      headers: authHeaders(), 
+      body: JSON.stringify({ url, method, headers, body }) 
+    });
+    const result = await r.json();
+    return { ...result, source: 'server-proxy' };
+  }
 }
 
 export async function exportPostmanApi(name, scan) {

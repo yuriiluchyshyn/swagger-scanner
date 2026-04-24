@@ -41,7 +41,25 @@ export default async function handler(req, res) {
     opts.headers['Content-Type'] = opts.headers['Content-Type'] || 'application/json';
   }
 
-  console.log('Fetch options:', JSON.stringify(opts, null, 2));
+  console.log('Fetch options:', JSON.stringify({
+    method: opts.method,
+    headers: opts.headers,
+    bodyLength: opts.body ? opts.body.length : 0
+  }, null, 2));
+
+  // Add additional headers that might help with corporate APIs
+  const enhancedOpts = {
+    ...opts,
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (compatible; OpenAPIScanner/1.0)',
+      'Accept': 'application/json, text/plain, */*',
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Cache-Control': 'no-cache',
+      ...opts.headers
+    }
+  };
+
+  console.log('Enhanced fetch options:', JSON.stringify(enhancedOpts, null, 2));
 
   try {
     console.log(`Executing request: ${method.toUpperCase()} ${url}`);
@@ -51,7 +69,7 @@ export default async function handler(req, res) {
       bodyLength: opts.body ? opts.body.length : 0
     }, null, 2));
     
-    const resp = await fetch(url, opts);
+    const resp = await fetch(url, enhancedOpts);
     console.log(`Response received - status: ${resp.status} ${resp.statusText}`);
     console.log('Response headers:', JSON.stringify(Object.fromEntries(resp.headers.entries()), null, 2));
     
