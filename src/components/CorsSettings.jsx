@@ -13,6 +13,14 @@ export default function CorsSettings({ corsSettings, onSave }) {
     setNewDomain('');
   };
 
+  const addQuickDomain = (domain) => {
+    if (corsSettings.blockedDomains?.includes(domain)) return; // Already exists
+    onSave({
+      ...corsSettings,
+      blockedDomains: [...(corsSettings.blockedDomains || []), domain]
+    });
+  };
+
   const removeDomain = (domain) => {
     onSave({
       ...corsSettings,
@@ -107,18 +115,28 @@ export default function CorsSettings({ corsSettings, onSave }) {
       {/* Quick Actions */}
       <div className="mb-2">
         <h3 className="mb-2">Quick Actions</h3>
-        <div className="flex gap-2 flex-wrap">
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
           <button
             className="btn-secondary"
-            style={{ fontSize: 12, padding: '4px 10px' }}
-            onClick={() => addDomain('*.usw2.dev.ccsi.la')}
+            style={{ fontSize: 12, padding: '4px 10px', whiteSpace: 'nowrap' }}
+            onClick={() => addQuickDomain('*.usw2.dev.ccsi.la')}
+            disabled={corsSettings.blockedDomains?.includes('*.usw2.dev.ccsi.la')}
           >
             + Block *.usw2.dev.ccsi.la
           </button>
           <button
             className="btn-secondary"
-            style={{ fontSize: 12, padding: '4px 10px' }}
+            style={{ fontSize: 12, padding: '4px 10px', whiteSpace: 'nowrap' }}
+            onClick={() => addQuickDomain('api.inventory.usw2.dev.ccsi.la')}
+            disabled={corsSettings.blockedDomains?.includes('api.inventory.usw2.dev.ccsi.la')}
+          >
+            + Block api.inventory
+          </button>
+          <button
+            className="btn-secondary"
+            style={{ fontSize: 12, padding: '4px 10px', whiteSpace: 'nowrap' }}
             onClick={() => onSave({ ...corsSettings, blockedDomains: [] })}
+            disabled={!corsSettings.blockedDomains?.length}
           >
             Clear All
           </button>

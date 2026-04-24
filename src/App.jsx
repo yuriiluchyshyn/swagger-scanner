@@ -47,6 +47,7 @@ export default function App() {
   const [swaggerParams, setSwaggerParams] = useState({}); // apiTitle → params object
   const [corsSettings, setCorsSettings] = useState({ globalMode: 'browser-first', blockedDomains: [] });
   const [showSettings, setShowSettings] = useState(false);
+  const [showCorsSettings, setShowCorsSettings] = useState(false);
 
   // Identity
   const [email, setEmail] = useState(null); // null = not loaded yet, '' = no email set
@@ -561,6 +562,13 @@ export default function App() {
           >
             ⚙️ Global Params {Object.keys(globalParams).length > 0 && `(${Object.keys(globalParams).length})`}
           </button>
+          <button
+            className="btn-secondary"
+            style={{ whiteSpace: 'nowrap' }}
+            onClick={() => setShowCorsSettings(s => !s)}
+          >
+            🌐 CORS Settings {corsSettings.blockedDomains?.length > 0 && `(${corsSettings.blockedDomains.length})`}
+          </button>
         </div>
       </div>
 
@@ -586,10 +594,11 @@ export default function App() {
       )}
 
       {showSettings && (
-        <>
-          <GlobalParams globalParams={globalParams} onSave={handleSaveGlobalParams} />
-          <CorsSettings corsSettings={corsSettings} onSave={handleSaveCorsSettings} />
-        </>
+        <GlobalParams globalParams={globalParams} onSave={handleSaveGlobalParams} />
+      )}
+
+      {showCorsSettings && (
+        <CorsSettings corsSettings={corsSettings} onSave={handleSaveCorsSettings} />
       )}
 
       <div className="tabs">
