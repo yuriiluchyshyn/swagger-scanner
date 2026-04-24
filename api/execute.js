@@ -9,6 +9,11 @@ export default async function handler(req, res) {
   
   if (req.method !== 'POST') return json(res, { error: 'Method not allowed' }, 405);
 
+  // Check if request body exists
+  if (!req.body) {
+    return json(res, { error: 'Request body is missing' }, 400);
+  }
+
   const { url, method, headers, body } = req.body;
   
   // Validate required fields

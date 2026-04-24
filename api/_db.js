@@ -3,12 +3,29 @@ import { MongoClient } from 'mongodb';
 let client = null;
 let db = null;
 
+import { MongoClient } from 'mongodb';
+
+let client = null;
+let db = null;
+
 export async function getDb() {
   if (db) return db;
-  client = new MongoClient(process.env.MONGODB_URI);
-  await client.connect();
-  db = client.db();
-  return db;
+  
+  const mongoUri = process.env.MONGODB_URI;
+  if (!mongoUri) {
+    throw new Error('MONGODB_URI environment variable is not set. Please configure it in Vercel dashboard.');
+  }
+  
+  try {
+    client = new MongoClient(mongoUri);
+    await client.connect();
+    db = client.db();
+    console.log('Connected to MongoDB successfully');
+    return db;
+  } catch (error) {
+    console.error('MongoDB connection failed:', error.message);
+    throw new Error(`MongoDB connection failed: ${error.message}`);
+  }
 }
 
 export function cors(res) {
