@@ -197,7 +197,8 @@ export default function App() {
         if (spec.error) { setStatus(`Error: ${spec.error}`); continue; }
         const parsed = parseSwaggerSpec(spec, url);
         const apiTitle = parsed.info?.title || url;
-        allEndpoints.push(...parsed.endpoints.map(ep => ({ ...ep, _apiTitle: apiTitle })));
+        const specSource = spec._source || 'unknown';
+        allEndpoints.push(...parsed.endpoints.map(ep => ({ ...ep, _apiTitle: apiTitle, _specSource: specSource })));
         definitions = { ...definitions, ...parsed.definitions };
         info = parsed.info;
         baseUrl = parsed.baseUrl;

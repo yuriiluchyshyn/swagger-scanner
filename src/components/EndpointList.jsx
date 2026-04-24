@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import EndpointDetail from './EndpointDetail.jsx';
 import SwaggerParams from './SwaggerParams.jsx';
+import SourceIndicator from './SourceIndicator.jsx';
 
 const METHODS = ['all', 'get', 'post', 'put', 'patch', 'delete'];
 
@@ -76,12 +77,16 @@ function ApiGroup({
   const apiSwaggerParams = swaggerParams[title] || {};
   const mergedValues = getMergedValues(title);
   const swaggerOverrideCount = Object.keys(apiSwaggerParams).length;
+  
+  // Get the spec source from the first endpoint in this group
+  const specSource = endpoints[0]?._specSource;
 
   return (
     <div className="api-group mb-4">
       <div className="api-group-header" onClick={() => onToggleGroup(title)}>
         <span className="api-group-chevron" style={{ transform: isOpen ? 'rotate(90deg)' : 'none' }}>▶</span>
         <span className="api-group-title">{title}</span>
+        <SourceIndicator source={specSource} type="spec" />
         <span className="api-group-count">{endpoints.length} endpoint{endpoints.length !== 1 ? 's' : ''}</span>
         <button
           className="btn-secondary"

@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { fetchRequests, patchRequest, deleteRequest } from '../api/client.js';
 import { generateValue } from '../helpers.js';
+import SourceIndicator from './SourceIndicator.jsx';
 
 // Collapsible JSON node
 function JsonNode({ data, depth = 0 }) {
@@ -358,14 +359,17 @@ export default function EndpointDetail({
       {epResponse && !epResponse.loading && (
         <div className="ep-response mt-2">
           <div className="flex gap-2 mb-2" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-            <h3>
-              Response
-              {epResponse.status && (
-                <span className={`status-code ${epResponse.status < 300 ? 'status-ok' : epResponse.status < 400 ? 'status-warn' : 'status-err'}`}>
-                  {epResponse.status} {epResponse.statusText}
-                </span>
-              )}
-            </h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <h3>
+                Response
+                {epResponse.status && (
+                  <span className={`status-code ${epResponse.status < 300 ? 'status-ok' : epResponse.status < 400 ? 'status-warn' : 'status-err'}`}>
+                    {epResponse.status} {epResponse.statusText}
+                  </span>
+                )}
+              </h3>
+              <SourceIndicator source={epResponse.source} type="request" />
+            </div>
             <button className="btn-secondary" onClick={onClearResponse}>Clear</button>
           </div>
           <div

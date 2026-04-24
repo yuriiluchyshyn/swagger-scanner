@@ -100,8 +100,59 @@ export async function saveDiff(diff) {
 // --- Utils (combined: execute, fetch-spec, export-postman) ---
 
 export async function fetchSpec(url) {
-  const r = await fetch(`${BASE}/utils?action=fetch-spec&url=${encodeURIComponent(url.split('#')[0])}`, authGet());
-  return r.json();
+  // Try direct browser request first (like Postman web)
+  try {
+    console.log('Attempting direct browser spec fetch...');
+    const cleanUrl = url.split('#')[0];
+    
+    const resp = await fetch(cleanUrl, { 
+      method: 'GET',
+      headers: { 
+        'Accept': 'application/json, text/plain, */*',
+        'Cache-Control': 'no-cache'
+      },
+      mode: 'cors'
+    });
+    
+    if (!resp.ok) {
+      throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+    }
+    
+    const text = await resp.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new Error('Response is not valid JSON');
+    }
+    
+    // Validate it's an OpenAPI/Swagger spec
+    if (!data.openapi && !data.swagger && !data.paths) {
+      throw new Error('Response is not an OpenAPI/Swagger spec');
+    }
+    
+    console.log('✓ Direct browser spec fetch successful');
+    return { ...data, _source: 'browser-direct' };
+    
+  } catch (directError) {
+    console.log('Direct browser spec fetch failed:', directError.message);
+    
+    // Fallback to server proxy
+    console.log('Falling back to server proxy for spec fetch...');
+    try {
+      const r = await fetch(`${BASE}/utils?action=fetch-spec&url=${encodeURIComponent(url.split('#')[0])}`, authGet());
+      const result = await r.json();
+      
+      if (result.error) {
+        throw new Error(result.error);
+      }
+      
+      return { ...result, _source: 'server-proxy' };
+    } catch (serverError) {
+      // If both methods fail, throw a comprehensive error
+      throw new Error(`Both browser and server fetch failed. Browser: ${directError.message}. Server: ${serverError.message}`);
+    }
+  }
 }
 
 export async function executeRequest({ url, method, headers, body }) {
