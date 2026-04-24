@@ -23,53 +23,84 @@ function authGet() {
   return email ? { headers: { 'X-User-Email': email } } : {};
 }
 
+// --- Settings (combined: urls, global-params, swagger-params, session, identity) ---
+
 export async function fetchUrls() {
-  const r = await fetch(`${BASE}/urls`, authGet());
+  const r = await fetch(`${BASE}/settings?type=urls`, authGet());
   return r.json();
 }
 
 export async function saveUrls(list) {
-  await fetch(`${BASE}/urls`, { method: 'POST', headers: authHeaders(), body: JSON.stringify(list) });
-}
-
-export async function fetchScans() {
-  const r = await fetch(`${BASE}/scans`, authGet());
-  return r.json();
-}
-
-export async function saveScan(scan) {
-  await fetch(`${BASE}/scans`, { method: 'POST', headers: authHeaders(), body: JSON.stringify(scan) });
+  await fetch(`${BASE}/settings?type=urls`, { method: 'POST', headers: authHeaders(), body: JSON.stringify(list) });
 }
 
 export async function fetchGlobalParams() {
-  const r = await fetch(`${BASE}/global-params`, authGet());
+  const r = await fetch(`${BASE}/settings?type=global-params`, authGet());
   return r.json();
 }
 
 export async function saveGlobalParamsApi(params) {
-  await fetch(`${BASE}/global-params`, { method: 'POST', headers: authHeaders(), body: JSON.stringify(params) });
+  await fetch(`${BASE}/settings?type=global-params`, { method: 'POST', headers: authHeaders(), body: JSON.stringify(params) });
 }
 
 export async function fetchSwaggerParams() {
-  const r = await fetch(`${BASE}/swagger-params`, authGet());
+  const r = await fetch(`${BASE}/settings?type=swagger-params`, authGet());
   return r.json();
 }
 
 export async function saveSwaggerParamsApi(params) {
-  await fetch(`${BASE}/swagger-params`, { method: 'POST', headers: authHeaders(), body: JSON.stringify(params) });
+  await fetch(`${BASE}/settings?type=swagger-params`, { method: 'POST', headers: authHeaders(), body: JSON.stringify(params) });
 }
 
 export async function fetchSession() {
-  const r = await fetch(`${BASE}/session`, authGet());
+  const r = await fetch(`${BASE}/settings?type=session`, authGet());
   return r.json();
 }
 
 export async function saveSession(session) {
-  await fetch(`${BASE}/session`, { method: 'POST', headers: authHeaders(), body: JSON.stringify(session) });
+  await fetch(`${BASE}/settings?type=session`, { method: 'POST', headers: authHeaders(), body: JSON.stringify(session) });
 }
 
+export async function fetchIdentity() {
+  return { email: getStoredEmail() };
+}
+
+export async function saveIdentity(email) {
+  setStoredEmail(email);
+}
+
+export async function clearAccount() {
+  const email = getStoredEmail();
+  if (email) {
+    await fetch(`${BASE}/settings?type=identity`, { method: 'DELETE', headers: { 'X-User-Email': email } });
+  }
+  clearStoredEmail();
+}
+
+// --- Data (combined: scans, diffs) ---
+
+export async function fetchScans() {
+  const r = await fetch(`${BASE}/data?type=scans`, authGet());
+  return r.json();
+}
+
+export async function saveScan(scan) {
+  await fetch(`${BASE}/data?type=scans`, { method: 'POST', headers: authHeaders(), body: JSON.stringify(scan) });
+}
+
+export async function fetchDiffs() {
+  const r = await fetch(`${BASE}/data?type=diffs`, authGet());
+  return r.json();
+}
+
+export async function saveDiff(diff) {
+  await fetch(`${BASE}/data?type=diffs`, { method: 'POST', headers: authHeaders(), body: JSON.stringify(diff) });
+}
+
+// --- Utils (combined: execute, fetch-spec, export-postman) ---
+
 export async function fetchSpec(url) {
-  const r = await fetch(`${BASE}/fetch-spec?url=${encodeURIComponent(url.split('#')[0])}`, authGet());
+  const r = await fetch(`${BASE}/utils?action=fetch-spec&url=${encodeURIComponent(url.split('#')[0])}`, authGet());
   return r.json();
 }
 
@@ -104,7 +135,7 @@ export async function executeRequest({ url, method, headers, body }) {
     
     // Fallback to server proxy
     console.log('Falling back to server proxy...');
-    const r = await fetch(`${BASE}/execute`, { 
+    const r = await fetch(`${BASE}/utils?action=execute`, { 
       method: 'POST', 
       headers: authHeaders(), 
       body: JSON.stringify({ url, method, headers, body }) 
@@ -115,18 +146,11 @@ export async function executeRequest({ url, method, headers, body }) {
 }
 
 export async function exportPostmanApi(name, scan) {
-  const r = await fetch(`${BASE}/export-postman`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ name, scan }) });
+  const r = await fetch(`${BASE}/utils?action=export-postman`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ name, scan }) });
   return r.json();
 }
 
-export async function fetchDiffs() {
-  const r = await fetch(`${BASE}/diffs`, authGet());
-  return r.json();
-}
-
-export async function saveDiff(diff) {
-  await fetch(`${BASE}/diffs`, { method: 'POST', headers: authHeaders(), body: JSON.stringify(diff) });
-}
+// --- Requests (unchanged - has sub-routes) ---
 
 export async function fetchRequests(key, pinnedOnly = false) {
   const params = new URLSearchParams();
@@ -149,6 +173,8 @@ export async function deleteRequest(id) {
   await fetch(`${BASE}/requests/${id}`, { method: 'DELETE', headers: authHeaders() });
 }
 
+// --- Checkpoints (unchanged - has sub-routes) ---
+
 export async function fetchCheckpoints() {
   const r = await fetch(`${BASE}/checkpoints`, authGet());
   return r.json();
@@ -166,21 +192,4 @@ export async function saveCheckpoint(checkpoint) {
 
 export async function deleteCheckpoint(index) {
   await fetch(`${BASE}/checkpoints/${index}`, { method: 'DELETE', headers: authHeaders() });
-}
-
-// Identity doesn't need email header — it manages the email itself
-export async function fetchIdentity() {
-  return { email: getStoredEmail() };
-}
-
-export async function saveIdentity(email) {
-  setStoredEmail(email);
-}
-
-export async function clearAccount() {
-  const email = getStoredEmail();
-  if (email) {
-    await fetch(`${BASE}/identity`, { method: 'DELETE', headers: { 'X-User-Email': email } });
-  }
-  clearStoredEmail();
 }

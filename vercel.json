@@ -8,25 +8,17 @@
         { "key": "Access-Control-Allow-Origin", "value": "*" },
         { "key": "Access-Control-Allow-Methods", "value": "GET,POST,PUT,PATCH,DELETE,OPTIONS" },
         { "key": "Access-Control-Allow-Headers", "value": "Content-Type, X-User-Email, Authorization, Accept, Origin, X-Requested-With" },
-        { "key": "Access-Control-Max-Age", "value": "86400" },
-        { "key": "Access-Control-Allow-Credentials", "value": "false" }
+        { "key": "Access-Control-Max-Age", "value": "86400" }
       ]
     }
   ],
   "rewrites": [
     { "source": "/api/checkpoints/:path*", "destination": "/api/checkpoints" },
     { "source": "/api/requests/:path*", "destination": "/api/requests" },
-    { "source": "/api/global-params", "destination": "/api/global-params" },
-    { "source": "/api/swagger-params", "destination": "/api/swagger-params" },
-    { "source": "/api/fetch-spec", "destination": "/api/fetch-spec" },
-    { "source": "/api/execute", "destination": "/api/execute" },
-    { "source": "/api/export-postman", "destination": "/api/export-postman" },
-    { "source": "/api/diffs", "destination": "/api/diffs" },
-    { "source": "/api/scans", "destination": "/api/scans" },
-    { "source": "/api/urls", "destination": "/api/urls" },
-    { "source": "/api/session", "destination": "/api/session" },
-    { "source": "/api/identity", "destination": "/api/identity" },
-    { "source": "/api/health", "destination": "/api/health" },
+    { "source": "/api/settings", "destination": "/api/settings" },
+    { "source": "/api/data", "destination": "/api/data" },
+    { "source": "/api/utils", "destination": "/api/utils" },
+    { "source": "/api/debug", "destination": "/api/debug" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }
