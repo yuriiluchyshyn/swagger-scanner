@@ -6,6 +6,7 @@ import {
   fetchScans, saveScan,
   fetchGlobalParams, saveGlobalParamsApi,
   fetchSwaggerParams, saveSwaggerParamsApi,
+  fetchCorsSettings, saveCorsSettings,
   fetchSession, saveSession,
   fetchCheckpoints, fetchCheckpoint, saveCheckpoint, deleteCheckpoint,
   fetchSpec, executeRequest, exportPostmanApi,
@@ -14,6 +15,7 @@ import {
 } from './api/client.js';
 import UrlPanel from './components/UrlPanel.jsx';
 import GlobalParams from './components/GlobalParams.jsx';
+import CorsSettings from './components/CorsSettings.jsx';
 import EndpointList from './components/EndpointList.jsx';
 import DiffView from './components/DiffView.jsx';
 import ScanHistory from './components/ScanHistory.jsx';
@@ -43,6 +45,7 @@ export default function App() {
   const [status, setStatus] = useState('');
   const [globalParams, setGlobalParams] = useState(DEFAULT_GLOBAL_PARAMS);
   const [swaggerParams, setSwaggerParams] = useState({}); // apiTitle → params object
+  const [corsSettings, setCorsSettings] = useState({ globalMode: 'browser-first', blockedDomains: [] });
   const [showSettings, setShowSettings] = useState(false);
 
   // Identity
@@ -119,6 +122,11 @@ export default function App() {
     fetchSwaggerParams().then(data => {
       if (data && typeof data === 'object' && !data.error) setSwaggerParams(data);
     }).catch(() => {});
+    fetchCorsSettings().then(data => {
+      if (data && typeof data === 'object' && !data.error) {
+        setCorsSettings(prev => ({ ...prev, ...data }));
+      }
+    }).catch(() => {});
     fetchSession().then(data => {
       if (data?.epPayloads) setEpPayloads(data.epPayloads);
       if (data?.epPathOverrides) setEpPathOverrides(data.epPathOverrides);
@@ -182,6 +190,11 @@ export default function App() {
     await saveGlobalParamsApi(params);
   }, []);
 
+  const handleSaveCorsSettings = useCallback(async (settings) => {
+    setCorsSettings(settings);
+    await saveCorsSettings(settings);
+  }, []);
+
   const handleScan = useCallback(async () => {
     setLoading(true);
     setStatus('Scanning...');
@@ -193,7 +206,7 @@ export default function App() {
 
     for (const url of list) {
       try {
-        const spec = await fetchSpec(url);
+        const spec = await fetchSpec(url, corsSettings);
         if (spec.error) { setStatus(`Error: ${spec.error}`); continue; }
         const parsed = parseSwaggerSpec(spec, url);
         const apiTitle = parsed.info?.title || url;
@@ -573,7 +586,10 @@ export default function App() {
       )}
 
       {showSettings && (
-        <GlobalParams globalParams={globalParams} onSave={handleSaveGlobalParams} />
+        <>
+          <GlobalParams globalParams={globalParams} onSave={handleSaveGlobalParams} />
+          <CorsSettings corsSettings={corsSettings} onSave={handleSaveCorsSettings} />
+        </>
       )}
 
       <div className="tabs">

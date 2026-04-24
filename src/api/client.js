@@ -52,6 +52,15 @@ export async function saveSwaggerParamsApi(params) {
   await fetch(`${BASE}/settings?type=swagger-params`, { method: 'POST', headers: authHeaders(), body: JSON.stringify(params) });
 }
 
+export async function fetchCorsSettings() {
+  const r = await fetch(`${BASE}/settings?type=cors-settings`, authGet());
+  return r.json();
+}
+
+export async function saveCorsSettings(settings) {
+  await fetch(`${BASE}/settings?type=cors-settings`, { method: 'POST', headers: authHeaders(), body: JSON.stringify(settings) });
+}
+
 export async function fetchSession() {
   const r = await fetch(`${BASE}/settings?type=session`, authGet());
   return r.json();
@@ -99,7 +108,36 @@ export async function saveDiff(diff) {
 
 // --- Utils (combined: execute, fetch-spec, export-postman) ---
 
-export async function fetchSpec(url) {
+export async function fetchSpec(url, corsSettings = {}) {
+  const globalMode = corsSettings.globalMode || 'browser-first';
+  const blockedDomains = corsSettings.blockedDomains || [];
+  
+  // Check if domain is blocked or global mode is server-only
+  const shouldSkipBrowser = globalMode === 'server-only' || 
+    blockedDomains.some(domain => {
+      if (domain.startsWith('*.')) {
+        const pattern = domain.substring(2);
+        return url.includes(pattern);
+      }
+      return url.includes(domain);
+    });
+
+  if (shouldSkipBrowser) {
+    console.log('Skipping browser fetch due to CORS settings, using server proxy...');
+    try {
+      const r = await fetch(`${BASE}/utils?action=fetch-spec&url=${encodeURIComponent(url.split('#')[0])}`, authGet());
+      const result = await r.json();
+      
+      if (result.error) {
+        throw new Error(result.error);
+      }
+      
+      return { ...result, _source: 'server-proxy' };
+    } catch (serverError) {
+      throw new Error(`Server proxy failed: ${serverError.message}`);
+    }
+  }
+
   // Helper function to resolve spec URL from Swagger UI pages
   async function resolveSpecUrlBrowser(inputUrl) {
     const cleanUrl = inputUrl.split('#')[0].split('%23')[0];

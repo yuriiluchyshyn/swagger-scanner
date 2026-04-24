@@ -1,7 +1,7 @@
 import { getDb, json, getEmail } from './_db.js';
 
-// Combines: global-params, swagger-params, session, urls, identity
-// Route via query param: /api/settings?type=global-params|swagger-params|session|urls|identity
+// Combines: global-params, swagger-params, session, urls, identity, cors-settings
+// Route via query param: /api/settings?type=global-params|swagger-params|session|urls|identity|cors-settings
 
 export default async function handler(req, res) {
   console.log(`=== SETTINGS API REQUEST ===`);
@@ -15,7 +15,7 @@ export default async function handler(req, res) {
     const type = searchParams.get('type');
     console.log('Settings type:', type);
 
-    if (!type) return json(res, { error: 'Missing ?type= param (global-params|swagger-params|session|urls|identity)' }, 400);
+    if (!type) return json(res, { error: 'Missing ?type= param (global-params|swagger-params|session|urls|identity|cors-settings)' }, 400);
 
     const email = getEmail(req);
     console.log('Email:', email);
@@ -41,7 +41,7 @@ export default async function handler(req, res) {
     // All other types require email
     if (!email) return json(res, { error: 'Missing X-User-Email' }, 401);
 
-    const validTypes = ['global-params', 'swagger-params', 'session', 'urls'];
+    const validTypes = ['global-params', 'swagger-params', 'session', 'urls', 'cors-settings'];
     if (!validTypes.includes(type)) return json(res, { error: `Invalid type: ${type}` }, 400);
 
     const db = await getDb();
