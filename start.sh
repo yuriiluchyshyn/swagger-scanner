@@ -13,7 +13,7 @@ else
   echo "❌ MongoDB not running."
 
   # Check if mongod is installed at all
-  if ! command -v mongod >/dev/null 2>&1; then
+  if ! command -v mongod >/dev/null 2>&1 && [ ! -f "/usr/local/mongodb/bin/mongod" ]; then
     echo "MongoDB is not installed. Installing via Homebrew..."
 
     if ! command -v brew >/dev/null 2>&1; then
@@ -81,7 +81,14 @@ else
 
   # Now start MongoDB
   echo "Starting MongoDB..."
-  brew services start mongodb/brew/mongodb-community
+  if command -v brew >/dev/null 2>&1 && brew services list | grep -q mongodb-community; then
+    brew services start mongodb/brew/mongodb-community
+  elif [ -f "/usr/local/mongodb/bin/mongod" ]; then
+    /usr/local/mongodb/bin/mongod --dbpath /usr/local/var/mongodb --logpath /usr/local/var/log/mongodb/mongo.log --fork
+  else
+    echo "❌ MongoDB binary not found. Please install MongoDB."
+    exit 1
+  fi
 
   # Wait for MongoDB to be ready (up to 15 seconds)
   echo "Waiting for MongoDB to start..."
