@@ -167,6 +167,7 @@ export async function fetchSpec(url, corsSettings = {}) {
     if (pathStr.includes('swagger-ui')) {
       const idx = pathStr.indexOf('/swagger-ui');
       const parent = pathStr.substring(0, idx);
+      console.log(`Detected Swagger UI URL. Parent path: "${parent}"`);
       if (parent) {
         candidates.push(
           `${base}${parent}`,
@@ -175,6 +176,19 @@ export async function fetchSpec(url, corsSettings = {}) {
           `${base}${parent}/swagger.json`
         );
       }
+    }
+    
+    // Handle /docs/swagger-ui URLs (like api.inventory)
+    if (pathStr.includes('/docs/swagger-ui')) {
+      const idx = pathStr.indexOf('/docs/swagger-ui');
+      const parent = pathStr.substring(0, idx);
+      console.log(`Detected /docs/swagger-ui URL. Parent path: "${parent}"`);
+      candidates.push(
+        `${base}${parent}/docs`,
+        `${base}${parent}/docs/api-docs`,
+        `${base}${parent}/docs/openapi.json`,
+        `${base}${parent}/docs/swagger.json`
+      );
     }
     
     // Common API spec endpoints
@@ -188,16 +202,24 @@ export async function fetchSpec(url, corsSettings = {}) {
     );
     
     // Try each candidate
+    console.log(`Trying ${candidates.length} candidate URLs:`, candidates);
     for (const candidate of candidates) {
       try {
+        console.log(`Trying candidate: ${candidate}`);
         const resp = await fetch(candidate, { 
           headers: { 'Accept': 'application/json' }
           // Removed mode: 'cors' to avoid preflight requests
         });
+        console.log(`Candidate ${candidate} - Status: ${resp.status}`);
         if (!resp.ok) continue;
         const j = await resp.json();
-        if (j.openapi || j.swagger || j.paths) return candidate;
-      } catch {}
+        if (j.openapi || j.swagger || j.paths) {
+          console.log(`✓ Found valid spec at: ${candidate}`);
+          return candidate;
+        }
+      } catch (err) {
+        console.log(`Candidate ${candidate} failed:`, err.message);
+      }
     }
     
     return cleanUrl; // Return original if no candidates work
@@ -207,6 +229,7 @@ export async function fetchSpec(url, corsSettings = {}) {
   try {
     console.log('Attempting direct browser spec fetch...');
     const resolvedUrl = await resolveSpecUrlBrowser(url);
+    console.log(`Original URL: ${url}`);
     console.log(`Resolved URL: ${resolvedUrl}`);
     
     const resp = await fetch(resolvedUrl, { 
@@ -216,6 +239,9 @@ export async function fetchSpec(url, corsSettings = {}) {
       }
       // Removed mode: 'cors' and Cache-Control to avoid preflight requests
     });
+    
+    console.log(`Response status: ${resp.status} ${resp.statusText}`);
+    console.log(`Response headers:`, Object.fromEntries(resp.headers.entries()));
     
     if (!resp.ok) {
       throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
