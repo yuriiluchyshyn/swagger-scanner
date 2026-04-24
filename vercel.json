@@ -26,7 +26,6 @@
     { "source": "/api/urls", "destination": "/api/urls" },
     { "source": "/api/session", "destination": "/api/session" },
     { "source": "/api/identity", "destination": "/api/identity" },
-    { "source": "/api/test-cors", "destination": "/api/test-cors" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }
