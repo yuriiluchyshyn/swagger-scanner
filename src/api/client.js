@@ -107,8 +107,8 @@ export async function fetchSpec(url) {
     // First try the URL directly
     try {
       const resp = await fetch(cleanUrl, { 
-        headers: { 'Accept': 'application/json' },
-        mode: 'cors'
+        headers: { 'Accept': 'application/json' }
+        // Removed mode: 'cors' to avoid preflight requests
       });
       if (resp.ok) {
         const text = await resp.text();
@@ -153,8 +153,8 @@ export async function fetchSpec(url) {
     for (const candidate of candidates) {
       try {
         const resp = await fetch(candidate, { 
-          headers: { 'Accept': 'application/json' },
-          mode: 'cors'
+          headers: { 'Accept': 'application/json' }
+          // Removed mode: 'cors' to avoid preflight requests
         });
         if (!resp.ok) continue;
         const j = await resp.json();
@@ -174,10 +174,9 @@ export async function fetchSpec(url) {
     const resp = await fetch(resolvedUrl, { 
       method: 'GET',
       headers: { 
-        'Accept': 'application/json, text/plain, */*',
-        'Cache-Control': 'no-cache'
-      },
-      mode: 'cors'
+        'Accept': 'application/json'
+      }
+      // Removed mode: 'cors' and Cache-Control to avoid preflight requests
     });
     
     if (!resp.ok) {
