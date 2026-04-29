@@ -46,6 +46,7 @@ export default function App() {
   const [globalParams, setGlobalParams] = useState(DEFAULT_GLOBAL_PARAMS);
   const [swaggerParams, setSwaggerParams] = useState({}); // apiTitle → params object
   const [corsSettings, setCorsSettings] = useState({ globalMode: 'browser-first', blockedDomains: [] });
+  const corsSettingsRef = useRef(corsSettings);
   const [showSettings, setShowSettings] = useState(false);
   const [showCorsSettings, setShowCorsSettings] = useState(false);
 
@@ -114,7 +115,12 @@ export default function App() {
     setGlobalParams(DEFAULT_GLOBAL_PARAMS);
     setSwaggerParams({});
 
-    fetchUrls().then(data => { if (Array.isArray(data) && data.length) setUrls(data.join('\n')); }).catch(() => {});
+    fetchUrls().then(data => {
+      console.log('=== URLS LOADED ===', data);
+      if (Array.isArray(data) && data.length) {
+        setUrls(data.join('\n'));
+      }
+    }).catch(err => { console.log('Error loading URLs:', err); });
     fetchGlobalParams().then(data => {
       if (data && typeof data === 'object' && !data.error && Object.keys(data).length > 0) {
         setGlobalParams(prev => ({ ...prev, ...data }));
@@ -130,6 +136,7 @@ export default function App() {
         const newSettings = { ...{ globalMode: 'browser-first', blockedDomains: [] }, ...data };
         console.log('Setting corsSettings to:', newSettings);
         setCorsSettings(newSettings);
+        corsSettingsRef.current = newSettings;
       } else {
         console.log('Using default CORS settings');
       }
@@ -201,6 +208,7 @@ export default function App() {
 
   const handleSaveCorsSettings = useCallback(async (settings) => {
     setCorsSettings(settings);
+    corsSettingsRef.current = settings;
     await saveCorsSettings(settings);
   }, []);
 
@@ -213,11 +221,14 @@ export default function App() {
     let info = {};
     let baseUrl = '';
 
+    // Use ref to always get the latest CORS settings (avoids stale closure)
+    const currentCorsSettings = corsSettingsRef.current;
+    console.log('=== SCAN START ===');
+    console.log('CORS settings from ref:', currentCorsSettings);
+
     for (const url of list) {
       try {
-        console.log('=== APP.JSX DEBUG ===');
-        console.log('corsSettings being passed to fetchSpec:', corsSettings);
-        const spec = await fetchSpec(url, corsSettings);
+        const spec = await fetchSpec(url, currentCorsSettings);
         if (spec.error) { setStatus(`Error: ${spec.error}`); continue; }
         const parsed = parseSwaggerSpec(spec, url);
         const apiTitle = parsed.info?.title || url;
