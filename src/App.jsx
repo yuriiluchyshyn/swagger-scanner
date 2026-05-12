@@ -1,0 +1,812 @@
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { parseSwaggerSpec, generateValue } from './helpers.js';
+import { compareScanResults } from './diffUtils.js';
+import {
+  fetchUrls, saveUrls as saveUrlsApi,
+  fetchScans, saveScan,
+  fetchGlobalParams, saveGlobalParamsApi,
+  fetchSwaggerParams, saveSwaggerParamsApi,
+  fetchCorsSettings, saveCorsSettings,
+  fetchSession, saveSession,
+  fetchCheckpoints, fetchCheckpoint, saveCheckpoint, deleteCheckpoint,
+  fetchSpec, executeRequest, exportPostmanApi,
+  saveDiff, saveRequest,
+  fetchIdentity, saveIdentity, clearAccount,
+} from './api/client.js';
+import UrlPanel from './components/UrlPanel.jsx';
+import GlobalParams from './components/GlobalParams.jsx';
+import AvailableParams from './components/AvailableParams.jsx';
+import CorsSettings from './components/CorsSettings.jsx';
+import EndpointList from './components/EndpointList.jsx';
+import DiffView from './components/DiffView.jsx';
+import ScanHistory from './components/ScanHistory.jsx';
+
+const DEFAULT_GLOBAL_PARAMS = {
+  Authorization:   { value: '', in: 'header', label: 'Auth Token' },
+  tenant_id:       { value: '', in: 'body',   label: 'Tenant ID' },
+  tenant_code:     { value: '', in: 'body',   label: 'Tenant Code (= Customer Number)' },
+  subscription_id: { value: '', in: 'body',   label: 'Subscription ID' },
+  principal_id:    { value: '', in: 'body',   label: 'Principal ID' },
+};
+
+export default function App() {
+  const [urls, setUrls] = useState('');
+  const [tab, setTab] = useState('scan');
+  const [loading, setLoading] = useState(false);
+  const [scanResult, setScanResult] = useState(null);
+  const [scans, setScans] = useState([]);
+  const [epPayloads, setEpPayloads] = useState({});
+  const [epPathParams, setEpPathParams] = useState({});
+  const [epPathOverrides, setEpPathOverrides] = useState({});
+  const [epParamOverrides, setEpParamOverrides] = useState({}); // per-endpoint non-path param overrides
+  const [epResponses, setEpResponses] = useState({});
+  const [checkpoint, setCheckpoint] = useState(null);
+  const [checkpoints, setCheckpoints] = useState([]); // list of checkpoint metadata
+  const [diff, setDiff] = useState(null);
+  const [status, setStatus] = useState('');
+  const [globalParams, setGlobalParams] = useState(DEFAULT_GLOBAL_PARAMS);
+  const [swaggerParams, setSwaggerParams] = useState({}); // apiTitle → params object
+  const [availableParams, setAvailableParams] = useState({}); // Available params from portal profile
+  const [corsSettings, setCorsSettings] = useState({ globalMode: 'browser-first', blockedDomains: [] });
+  const corsSettingsRef = useRef(corsSettings);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showAvailableParams, setShowAvailableParams] = useState(false);
+  const [showCorsSettings, setShowCorsSettings] = useState(false);
+
+  // Identity
+  const [email, setEmail] = useState(null); // null = not loaded yet, '' = no email set
+  const [emailInput, setEmailInput] = useState('');
+  const [confirmClear, setConfirmClear] = useState(false);
+  const [changingEmail, setChangingEmail] = useState(false);
+  const [showJsonPaste, setShowJsonPaste] = useState(false);
+  const [jsonPasteValue, setJsonPasteValue] = useState('');
+  const fileInputRef = useRef(null);
+
+  // Flat value map: param name → value string (global level)
+  const globalValues = Object.fromEntries(
+    Object.entries(globalParams).map(([k, v]) => [k, typeof v === 'object' ? v.value : v])
+  );
+
+  // Merged values for a given apiTitle: global → swagger-level override → available params
+  const getMergedValues = useCallback((apiTitle) => {
+    const swaggerLevel = swaggerParams[apiTitle] || {};
+    const swaggerValues = Object.fromEntries(
+      Object.entries(swaggerLevel).map(([k, v]) => [k, typeof v === 'object' ? v.value : v])
+    );
+    return { ...globalValues, ...swaggerValues, ...availableParams };
+  }, [globalValues, swaggerParams, availableParams]);
+
+  const handleSaveSwaggerParams = useCallback((apiTitle, params) => {
+    setSwaggerParams(prev => {
+      const next = { ...prev, [apiTitle]: params };
+      saveSwaggerParamsApi(next).catch(() => {});
+      return next;
+    });
+  }, []);
+
+  // Debounced session save — fires 800ms after last change to payloads/overrides
+  const sessionSaveTimer = useRef(null);
+  const saveSessionDebounced = useCallback((payloads, overrides) => {
+    clearTimeout(sessionSaveTimer.current);
+    sessionSaveTimer.current = setTimeout(() => {
+      saveSession({ epPayloads: payloads, epPathOverrides: overrides }).catch(() => {});
+    }, 800);
+  }, []);
+
+  // Load identity from localStorage on mount
+  useEffect(() => {
+    fetchIdentity().then(data => {
+      setEmail(data?.email || '');
+      setEmailInput(data?.email || '');
+    }).catch(() => setEmail(''));
+  }, []);
+
+  // Listen for auto-fill messages from extension
+  useEffect(() => {
+    const handleMessage = (event) => {
+      // Accept messages from extension (any origin since it's injected via content script)
+      if (event.data && event.data.type === 'AUTOFILL_GLOBAL_PARAMS') {
+        const data = event.data.data;
+        console.log('Received AUTOFILL_GLOBAL_PARAMS:', data);
+        console.log('Available params:', event.data.availableParams);
+        
+        // Update global params with data from extension
+        setGlobalParams(prev => {
+          const newParams = { ...prev };
+          Object.keys(newParams).forEach(key => {
+            if (data[key]) {
+              if (typeof newParams[key] === 'object') {
+                newParams[key] = { ...newParams[key], value: data[key] };
+              } else {
+                newParams[key] = data[key];
+              }
+            }
+          });
+          saveGlobalParamsApi(newParams);
+          return newParams;
+        });
+        
+        // Store available parameters for auto-population
+        if (event.data.availableParams && Object.keys(event.data.availableParams).length > 0) {
+          setAvailableParams(event.data.availableParams);
+          setShowAvailableParams(true);
+          // Also persist to localStorage so it survives page reload
+          localStorage.setItem('openapi-scanner-available-params', JSON.stringify(event.data.availableParams));
+        }
+        
+        flash(`Auto-filled from portal profile: ${Object.keys(data).join(', ')}`);
+      }
+      
+      // Handle separate available params storage message
+      if (event.data && event.data.type === 'STORE_AVAILABLE_PARAMS') {
+        const params = event.data.data;
+        if (params && Object.keys(params).length > 0) {
+          setAvailableParams(params);
+          localStorage.setItem('openapi-scanner-available-params', JSON.stringify(params));
+        }
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
+
+  // Load available params from localStorage on mount
+  useEffect(() => {
+    const stored = localStorage.getItem('openapi-scanner-available-params');
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (Object.keys(parsed).length > 0) {
+          setAvailableParams(parsed);
+        }
+      } catch {}
+    }
+  }, []);
+
+  // Load all user data when email is set/changed
+  useEffect(() => {
+    if (!email) return;
+    // Reset state before loading
+    setUrls('');
+    setScanResult(null);
+    setScans([]);
+    setEpPayloads({});
+    setEpPathParams({});
+    setEpPathOverrides({});
+    setEpResponses({});
+    setCheckpoint(null);
+    setCheckpoints([]);
+    setDiff(null);
+    setGlobalParams(DEFAULT_GLOBAL_PARAMS);
+    setSwaggerParams({});
+
+    fetchUrls().then(data => {
+      console.log('=== URLS LOADED ===', data);
+      if (Array.isArray(data) && data.length) {
+        setUrls(data.join('\n'));
+      }
+    }).catch(err => { console.log('Error loading URLs:', err); });
+    fetchGlobalParams().then(data => {
+      if (data && typeof data === 'object' && !data.error && Object.keys(data).length > 0) {
+        setGlobalParams(prev => ({ ...prev, ...data }));
+      }
+    }).catch(() => {});
+    fetchSwaggerParams().then(data => {
+      if (data && typeof data === 'object' && !data.error) setSwaggerParams(data);
+    }).catch(() => {});
+    fetchCorsSettings().then(data => {
+      console.log('=== CORS SETTINGS LOADED ===');
+      console.log('Raw data from server:', data);
+      if (data && typeof data === 'object' && !data.error) {
+        const newSettings = { ...{ globalMode: 'browser-first', blockedDomains: [] }, ...data };
+        console.log('Setting corsSettings to:', newSettings);
+        setCorsSettings(newSettings);
+        corsSettingsRef.current = newSettings;
+      } else {
+        console.log('Using default CORS settings');
+      }
+    }).catch(err => {
+      console.log('Error loading CORS settings:', err);
+    });
+    fetchSession().then(data => {
+      if (data?.epPayloads) setEpPayloads(data.epPayloads);
+      if (data?.epPathOverrides) setEpPathOverrides(data.epPathOverrides);
+    }).catch(() => {});
+    fetchCheckpoints().then(async data => {
+      if (!Array.isArray(data) || data.length === 0) return;
+      setCheckpoints(data);
+      const last = data[data.length - 1];
+      const full = await fetchCheckpoint(last.index);
+      setCheckpoint(full);
+    }).catch(() => {});
+    fetchScans().then(data => {
+      if (!Array.isArray(data)) return;
+      setScans(data);
+      if (data.length > 0) {
+        const last = data[data.length - 1];
+        setScanResult(last);
+      }
+    }).catch(() => {});
+  }, [email]);
+
+  const flash = (msg) => { setStatus(msg); setTimeout(() => setStatus(''), 2500); };
+
+  const handleSetEmail = useCallback(async () => {
+    const trimmed = emailInput.trim();
+    if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) return;
+    await saveIdentity(trimmed);
+    setEmail(trimmed);
+    setChangingEmail(false);
+    flash('Email saved');
+  }, [emailInput]);
+
+  const handleClearAccount = useCallback(async () => {
+    await clearAccount();
+    setEmail('');
+    setEmailInput('');
+    setUrls('');
+    setScanResult(null);
+    setScans([]);
+    setEpPayloads({});
+    setEpPathParams({});
+    setEpPathOverrides({});
+    setEpResponses({});
+    setCheckpoint(null);
+    setCheckpoints([]);
+    setDiff(null);
+    setGlobalParams(DEFAULT_GLOBAL_PARAMS);
+    setSwaggerParams({});
+    setConfirmClear(false);
+    flash('Account cleared');
+  }, []);
+
+  const handleSaveUrls = useCallback(async () => {
+    const list = urls.split('\n').map(s => s.trim()).filter(Boolean);
+    await saveUrlsApi(list);
+    flash('URLs saved');
+  }, [urls]);
+
+  const handleSaveGlobalParams = useCallback(async (params) => {
+    setGlobalParams(params);
+    await saveGlobalParamsApi(params);
+  }, []);
+
+  const handleSaveCorsSettings = useCallback(async (settings) => {
+    setCorsSettings(settings);
+    corsSettingsRef.current = settings;
+    await saveCorsSettings(settings);
+  }, []);
+
+  const handleScan = useCallback(async () => {
+    setLoading(true);
+    setStatus('Scanning...');
+    const list = urls.split('\n').map(s => s.trim()).filter(Boolean);
+    const allEndpoints = [];
+    let definitions = {};
+    let info = {};
+    let baseUrl = '';
+
+    // Use ref to always get the latest CORS settings (avoids stale closure)
+    const currentCorsSettings = corsSettingsRef.current;
+    console.log('=== SCAN START ===');
+    console.log('CORS settings from ref:', currentCorsSettings);
+
+    for (const url of list) {
+      try {
+        const spec = await fetchSpec(url, currentCorsSettings);
+        if (spec.error) { setStatus(`Error: ${spec.error}`); continue; }
+        const parsed = parseSwaggerSpec(spec, url);
+        const apiTitle = parsed.info?.title || url;
+        const specSource = spec._source || 'unknown';
+        allEndpoints.push(...parsed.endpoints.map(ep => ({ ...ep, _apiTitle: apiTitle, _specSource: specSource })));
+        definitions = { ...definitions, ...parsed.definitions };
+        info = parsed.info;
+        baseUrl = parsed.baseUrl;
+      } catch (e) {
+        setStatus(`Error fetching ${url}: ${e.message}`);
+      }
+    }
+
+    const scan = { timestamp: new Date().toISOString(), sourceUrls: list, endpoints: allEndpoints, definitions, info, baseUrl };
+    setScanResult(scan);
+    setDiff(null); // clear stale diff when a new scan runs
+    setScans(prev => [...prev, scan]);
+    saveScan(scan).catch(() => {}); // persist so it survives refresh
+    setLoading(false);
+    flash(`Scanned ${allEndpoints.length} endpoints`);
+  }, [urls]);
+
+  const handleUploadSpecs = useCallback((files) => {
+    setLoading(true);
+    setStatus('Processing uploaded specs...');
+    const allEndpoints = [];
+    let definitions = {};
+    let info = {};
+    let baseUrl = '';
+
+    for (const { name, spec } of files) {
+      if (!spec.openapi && !spec.swagger && !spec.paths) {
+        setStatus(`${name}: not a valid OpenAPI/Swagger spec`);
+        continue;
+      }
+      const parsed = parseSwaggerSpec(spec, name);
+      const apiTitle = parsed.info?.title || name;
+      allEndpoints.push(...parsed.endpoints.map(ep => ({ ...ep, _apiTitle: apiTitle })));
+      definitions = { ...definitions, ...parsed.definitions };
+      info = parsed.info;
+      baseUrl = parsed.baseUrl;
+    }
+
+    const scan = { timestamp: new Date().toISOString(), sourceUrls: files.map(f => `file://${f.name}`), endpoints: allEndpoints, definitions, info, baseUrl };
+    setScanResult(scan);
+    setDiff(null);
+    setScans(prev => [...prev, scan]);
+    saveScan(scan).catch(() => {});
+    setLoading(false);
+    flash(`Loaded ${allEndpoints.length} endpoints from ${files.length} file(s)`);
+  }, []);
+
+  const handleFileInput = useCallback((e) => {
+    const files = Array.from(e.target.files);
+    if (!files.length) return;
+    const readers = files.map(f => new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => { try { resolve({ name: f.name, spec: JSON.parse(reader.result) }); } catch { reject(new Error(`${f.name} is not valid JSON`)); } };
+      reader.onerror = reject;
+      reader.readAsText(f);
+    }));
+    Promise.all(readers).then(specs => handleUploadSpecs(specs)).catch(err => flash(err.message));
+    e.target.value = '';
+  }, [handleUploadSpecs]);
+
+  const handleJsonPasteSubmit = useCallback(() => {
+    const trimmed = jsonPasteValue.trim();
+    if (!trimmed) return;
+    try {
+      const spec = JSON.parse(trimmed);
+      if (!spec.openapi && !spec.swagger && !spec.paths) { flash('Not a valid OpenAPI/Swagger spec'); return; }
+      handleUploadSpecs([{ name: spec.info?.title || 'Pasted Spec', spec }]);
+      setJsonPasteValue('');
+      setShowJsonPaste(false);
+    } catch { flash('Invalid JSON'); }
+  }, [jsonPasteValue, handleUploadSpecs]);
+
+  const handleSaveCheckpoint = useCallback(async () => {
+    if (!scanResult) return;
+    const result = await saveCheckpoint(scanResult);
+    const newIndex = result?.index ?? 0;
+    // Reload checkpoint list metadata
+    const list = await fetchCheckpoints();
+    setCheckpoints(list);
+    // Load the full checkpoint we just saved and set as active
+    const full = await fetchCheckpoint(newIndex);
+    setCheckpoint(full);
+    setDiff(null);
+    flash('Checkpoint saved');
+  }, [scanResult]);
+
+  const handleSelectCheckpoint = useCallback(async (meta) => {
+    const full = await fetchCheckpoint(meta.index);
+    setCheckpoint(full);
+    setDiff(null);
+  }, []);
+
+  const handleDeleteCheckpoint = useCallback(async (meta) => {
+    await deleteCheckpoint(meta.index);
+    const list = await fetchCheckpoints();
+    setCheckpoints(list);
+    if (checkpoint?.timestamp === meta.timestamp) {
+      setCheckpoint(null);
+      setDiff(null);
+    }
+  }, [checkpoint]);
+
+  const handleRunDiff = useCallback(() => {
+    if (!checkpoint || !scanResult) return;
+    const result = compareScanResults(checkpoint, scanResult);
+    setDiff(result);
+    setTab('diff');
+    saveDiff({
+      timestamp: new Date().toISOString(),
+      checkpointTimestamp: checkpoint.timestamp,
+      scanTimestamp: scanResult.timestamp,
+      ...result,
+    }).catch(() => {});
+  }, [checkpoint, scanResult]);
+
+  const injectGlobalParams = useCallback((obj, mergedValues) => {
+    if (!obj || typeof obj !== 'object') return obj;
+    if (Array.isArray(obj)) return obj.map(item => injectGlobalParams(item, mergedValues));
+    const result = { ...obj };
+    for (const [key, val] of Object.entries(result)) {
+      if (key in mergedValues && mergedValues[key]) result[key] = mergedValues[key];
+      else if (typeof val === 'object') result[key] = injectGlobalParams(val, mergedValues);
+    }
+    return result;
+  }, []);
+
+  const handleGeneratePayload = useCallback((ep) => {
+    const key = `${ep.method}:${ep.path}`;
+    const merged = getMergedValues(ep._apiTitle);
+    let payload = {};
+    if (ep.requestBody) {
+      const jsonContent = ep.requestBody.content?.['application/json'];
+      if (jsonContent?.schema) payload = generateValue(jsonContent.schema, scanResult?.definitions);
+    }
+    const bodyParam = (ep.parameters || []).find(p => p.in === 'body');
+    if (bodyParam?.schema) payload = generateValue(bodyParam.schema, scanResult?.definitions);
+    payload = injectGlobalParams(payload, merged);
+    setEpPayloads(prev => ({ ...prev, [key]: JSON.stringify(payload, null, 2) }));
+  }, [scanResult, injectGlobalParams, getMergedValues]);
+
+  const handleGeneratePathParams = useCallback((ep) => {
+    const key = `${ep.method}:${ep.path}`;
+    const merged = getMergedValues(ep._apiTitle);
+    const pathParams = (ep.parameters || []).filter(p => p.in === 'path');
+    if (!pathParams.length) return;
+    const generated = {};
+    for (const p of pathParams) {
+      generated[p.name] = merged[p.name]
+        || String(generateValue({ type: p.type || p.schema?.type || 'string', format: p.schema?.format }, scanResult?.definitions));
+    }
+    setEpPathParams(prev => ({ ...prev, [key]: { ...(prev[key] || {}), ...generated } }));
+  }, [getMergedValues, scanResult]);
+
+  const handleExecute = useCallback(async (ep) => {
+    const key = `${ep.method}:${ep.path}`;
+    const merged = getMergedValues(ep._apiTitle);
+    // Merged params object (for header location check)
+    const mergedParamsCfg = { ...globalParams, ...(swaggerParams[ep._apiTitle] || {}) };
+    setEpResponses(prev => ({ ...prev, [key]: { loading: true } }));
+
+    let url = ep.fullUrl;
+    let body;
+    const payload = epPayloads[key];
+    if (payload) { try { body = JSON.parse(payload); } catch { body = payload; } }
+
+    // Path params — priority: endpoint override → merged (global+swagger) → generated → example → name
+    const pathParamRegex = /\{(\w+)\}/g;
+    let m;
+    while ((m = pathParamRegex.exec(ep.fullUrl)) !== null) {
+      const pName = m[1];
+      const val = epPathOverrides[key]?.[pName]
+        ?? merged[pName]
+        ?? epPathParams[key]?.[pName]
+        ?? ep.parameters?.find(p => p.in === 'path' && p.name === pName)?.example
+        ?? pName;
+      url = url.replace(`{${pName}}`, val);
+    }
+
+    // Query params — priority: endpoint override → merged (global+swagger) → example
+    const queryParams = (ep.parameters || []).filter(p => p.in === 'query').map(p => {
+      const val = epParamOverrides[key]?.[p.name] ?? merged[p.name] ?? p.example ?? '';
+      return val ? `${p.name}=${encodeURIComponent(val)}` : null;
+    }).filter(Boolean);
+    if (queryParams.length) url += '?' + queryParams.join('&');
+
+    // Headers — priority: endpoint override → merged params cfg → merged (global+swagger) → example
+    const headers = {};
+    for (const [name, cfg] of Object.entries(mergedParamsCfg)) {
+      const loc = typeof cfg === 'object' ? cfg.in : 'body';
+      const val = typeof cfg === 'object' ? cfg.value : cfg;
+      if (loc === 'header' && val) headers[name] = val;
+    }
+    for (const p of ep.parameters || []) {
+      if (p.in === 'header' && !headers[p.name]) {
+        const val = epParamOverrides[key]?.[p.name] ?? merged[p.name] ?? p.example;
+        if (val) headers[p.name] = val;
+      }
+    }
+
+    const hasBody = ['post', 'put', 'patch', 'delete'].includes(ep.method);
+    try {
+      // Use ref to always get the latest CORS settings (avoids stale closure)
+      const currentCorsSettings = corsSettingsRef.current;
+      const data = await executeRequest({ url, method: ep.method, headers, body: hasBody ? body : undefined }, currentCorsSettings);
+      setEpResponses(prev => ({ ...prev, [key]: data }));
+    } catch (e) {
+      setEpResponses(prev => ({ ...prev, [key]: { error: e.message } }));
+    }
+  }, [epPayloads, epPathParams, epPathOverrides, epParamOverrides, globalParams, swaggerParams, getMergedValues]);
+
+  const handleSaveRequest = useCallback(async (ep, label) => {
+    const key = `${ep.method}:${ep.path}`;
+    await saveRequest({
+      key,
+      label: label || `${ep.method.toUpperCase()} ${ep.path}`,
+      apiTitle: ep._apiTitle || '',
+      method: ep.method,
+      path: ep.path,
+      fullUrl: ep.fullUrl,
+      payload: epPayloads[key] || null,
+      pathOverrides: epPathOverrides[key] || {},
+      swaggerParams: swaggerParams[ep._apiTitle] || {},
+      response: epResponses[key] || null,
+    });
+  }, [epPayloads, epPathOverrides, epResponses, swaggerParams]);
+
+  const handleExportPostman = useCallback(async () => {
+    if (!scanResult) return;
+    const collection = await exportPostmanApi(scanResult.info?.title || 'Swagger Export', scanResult);
+    const blob = new Blob([JSON.stringify(collection, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `postman-collection-${Date.now()}.json`;
+    a.click();
+    flash('Postman collection downloaded');
+  }, [scanResult]);
+
+  // Still loading identity
+  if (email === null) return <div className="container"><span className="spinner" /> Loading...</div>;
+
+  // No email set — show gate
+  if (!email) return (
+    <div className="container" style={{ maxWidth: 420, marginTop: 80 }}>
+      <h1>🔍 Open API Scanner</h1>
+      <div className="card" style={{ marginTop: 24 }}>
+        <p style={{ marginBottom: 12, color: 'var(--text-secondary)' }}>Enter your email to get started. No password needed.</p>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input
+            type="email"
+            className="input"
+            style={{ flex: 1 }}
+            placeholder="you@example.com"
+            value={emailInput}
+            onChange={e => setEmailInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleSetEmail()}
+            autoFocus
+          />
+          <button className="btn-primary" onClick={handleSetEmail}>Continue</button>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="container">
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+        <h1 style={{ margin: 0 }}>🔍 Open API Scanner</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {!changingEmail
+            ? <>
+                <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>👤 {email}</span>
+                <button className="btn-secondary" style={{ fontSize: 12, padding: '3px 10px' }} onClick={() => { setChangingEmail(true); setEmailInput(email); }}>Change account</button>
+                {!confirmClear
+                  ? <button className="btn-secondary" style={{ fontSize: 12, padding: '3px 10px', color: '#f85149' }} onClick={() => setConfirmClear(true)}>Clear account</button>
+                  : <>
+                      <span style={{ fontSize: 12, color: '#f85149' }}>Are you sure?</span>
+                      <button className="btn-primary" style={{ fontSize: 12, padding: '3px 10px', background: '#f85149', borderColor: '#f85149' }} onClick={handleClearAccount}>Yes, delete all</button>
+                      <button className="btn-secondary" style={{ fontSize: 12, padding: '3px 10px' }} onClick={() => setConfirmClear(false)}>Cancel</button>
+                    </>
+                }
+              </>
+            : <>
+                <input
+                  type="email"
+                  className="input"
+                  style={{ fontSize: 12, padding: '3px 8px', width: 200 }}
+                  value={emailInput}
+                  onChange={e => setEmailInput(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleSetEmail()}
+                  autoFocus
+                />
+                <button className="btn-primary" style={{ fontSize: 12, padding: '3px 10px' }} onClick={handleSetEmail}>Save</button>
+                <button className="btn-secondary" style={{ fontSize: 12, padding: '3px 10px' }} onClick={() => setChangingEmail(false)}>Cancel</button>
+              </>
+          }
+        </div>
+      </div>
+
+      {status && (
+        <div className="card mb-4" style={{ borderColor: '#1f6feb' }}>
+          <span className="text-sm">{loading && <span className="spinner" />}{status}</span>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 0 }}>
+        <div style={{ flex: 1 }}>
+          <UrlPanel
+            urls={urls}
+            setUrls={setUrls}
+            loading={loading}
+            onSave={handleSaveUrls}
+            onScan={handleScan}
+            onCheckpoint={handleSaveCheckpoint}
+            onDiff={handleRunDiff}
+            onExport={handleExportPostman}
+            scanResult={scanResult}
+            checkpoint={checkpoint}
+          />
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 12 }}>
+          <button
+            className="btn-secondary"
+            style={{ whiteSpace: 'nowrap', display: 'none' }}
+            onClick={() => fileInputRef.current?.click()}
+            disabled={loading}
+          >
+            📁 Upload Swagger JSON
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json,application/json"
+            multiple
+            style={{ display: 'none' }}
+            onChange={handleFileInput}
+          />
+          <button
+            className="btn-secondary"
+            style={{ whiteSpace: 'nowrap', display: 'none' }}
+            onClick={() => setShowJsonPaste(s => !s)}
+            disabled={loading}
+          >
+            📋 Add Swagger JSON
+          </button>
+          <button
+            className="btn-secondary"
+            style={{ whiteSpace: 'nowrap' }}
+            onClick={() => setShowSettings(s => !s)}
+          >
+            ⚙️ Global Params {Object.keys(globalParams).length > 0 && `(${Object.keys(globalParams).length})`}
+          </button>
+          <button
+            className="btn-secondary"
+            style={{ whiteSpace: 'nowrap' }}
+            onClick={() => setShowCorsSettings(s => !s)}
+          >
+            🌐 CORS Settings {corsSettings.blockedDomains?.length > 0 && `(${corsSettings.blockedDomains.length})`}
+          </button>
+          {Object.keys(availableParams).length > 0 && (
+            <button
+              className="btn-secondary"
+              style={{ whiteSpace: 'nowrap' }}
+              onClick={() => setShowAvailableParams(s => !s)}
+            >
+              📋 Available Params ({Object.keys(availableParams).length})
+            </button>
+          )}
+        </div>
+      </div>
+
+      {showJsonPaste && (
+        <div className="card mb-4">
+          <h3 style={{ margin: '0 0 8px' }}>Paste Swagger/OpenAPI JSON</h3>
+          <textarea
+            rows={8}
+            placeholder='Paste your Swagger/OpenAPI JSON spec here...'
+            value={jsonPasteValue}
+            onChange={e => setJsonPasteValue(e.target.value)}
+            style={{ fontFamily: 'monospace', fontSize: 12 }}
+          />
+          <div className="flex gap-2 mt-2">
+            <button className="btn-primary" onClick={handleJsonPasteSubmit} disabled={!jsonPasteValue.trim()}>
+              Parse & Load
+            </button>
+            <button className="btn-secondary" onClick={() => { setShowJsonPaste(false); setJsonPasteValue(''); }}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showAvailableParams && Object.keys(availableParams).length > 0 && (
+        <AvailableParams 
+          availableParams={availableParams} 
+          onClose={() => setShowAvailableParams(false)} 
+        />
+      )}
+
+      {showSettings && (
+        <GlobalParams globalParams={globalParams} onSave={handleSaveGlobalParams} />
+      )}
+
+      {showCorsSettings && (
+        <CorsSettings corsSettings={corsSettings} onSave={handleSaveCorsSettings} />
+      )}
+
+      <div className="tabs">
+        <button className={`tab ${tab === 'scan' ? 'active' : ''}`} onClick={() => setTab('scan')}>
+          Endpoints {scanResult && `(${scanResult.endpoints.length})`}
+        </button>
+        <button className={`tab ${tab === 'diff' ? 'active' : ''}`} onClick={() => setTab('diff')}>
+          Diff {diff && `(${diff.added.length + diff.removed.length + diff.changed.length} changes)`}
+        </button>
+        <button className={`tab ${tab === 'history' ? 'active' : ''}`} onClick={() => setTab('history')}>
+          Scan History ({scans.length})
+        </button>
+      </div>
+
+      {tab === 'scan' && (
+        <EndpointList
+          scanResult={scanResult}
+          epPayloads={epPayloads}
+          epPathParams={epPathParams}
+          epPathOverrides={epPathOverrides}
+          epParamOverrides={epParamOverrides}
+          epResponses={epResponses}
+          globalParams={globalParams}
+          globalValues={globalValues}
+          availableParams={availableParams}
+          swaggerParams={swaggerParams}
+          getMergedValues={getMergedValues}
+          onSaveSwaggerParams={handleSaveSwaggerParams}
+          onExecute={handleExecute}
+          onGeneratePayload={handleGeneratePayload}
+          onGeneratePathParams={handleGeneratePathParams}
+          onSaveRequest={handleSaveRequest}
+          onPayloadChange={(key, val) => setEpPayloads(prev => {
+            const next = { ...prev, [key]: val };
+            saveSessionDebounced(next, epPathOverrides);
+            return next;
+          })}
+          onPathOverride={(key, name, val) => setEpPathOverrides(prev => {
+            const next = { ...prev, [key]: { ...(prev[key] || {}), [name]: val } };
+            saveSessionDebounced(epPayloads, next);
+            return next;
+          })}
+          onPathOverrideReset={(key, name) => setEpPathOverrides(prev => {
+            const n = { ...prev, [key]: { ...(prev[key] || {}) } };
+            delete n[key][name];
+            saveSessionDebounced(epPayloads, n);
+            return n;
+          })}
+          onParamOverride={(key, name, val) => setEpParamOverrides(prev => {
+            const next = { ...prev, [key]: { ...(prev[key] || {}), [name]: val } };
+            // Save to session (we can extend saveSessionDebounced or create a new function)
+            return next;
+          })}
+          onParamOverrideReset={(key, name) => setEpParamOverrides(prev => {
+            const n = { ...prev, [key]: { ...(prev[key] || {}) } };
+            delete n[key][name];
+            return n;
+          })}
+          onClearResponse={key => setEpResponses(prev => { const n = { ...prev }; delete n[key]; return n; })}
+          onUpdateGlobalParam={(name, value) => {
+            const newGlobalParams = { ...globalParams };
+            if (typeof newGlobalParams[name] === 'object') {
+              newGlobalParams[name] = { ...newGlobalParams[name], value };
+            } else {
+              newGlobalParams[name] = value;
+            }
+            setGlobalParams(newGlobalParams);
+            saveGlobalParamsApi(newGlobalParams);
+          }}
+        />
+      )}
+
+      {tab === 'diff' && (
+        <DiffView
+          diff={diff}
+          checkpoint={checkpoint}
+          checkpoints={checkpoints}
+          scanResult={scanResult}
+          onSelectCheckpoint={handleSelectCheckpoint}
+          onDeleteCheckpoint={handleDeleteCheckpoint}
+          onRunDiff={handleRunDiff}
+        />
+      )}
+
+      {tab === 'history' && (
+        <ScanHistory
+          scans={scans}
+          onRestoreScan={s => { setScanResult(s); if (s.sourceUrls?.length) setUrls(s.sourceUrls.join('\n')); setTab('scan'); flash('Scan session restored'); }}
+          onRestoreRequest={entry => {
+            if (entry.payload) setEpPayloads(prev => ({ ...prev, [entry.key]: entry.payload }));
+            if (entry.pathOverrides && Object.keys(entry.pathOverrides).length) {
+              setEpPathOverrides(prev => ({ ...prev, [entry.key]: entry.pathOverrides }));
+            }
+            if (entry.swaggerParams && entry.apiTitle) {
+              setSwaggerParams(prev => ({ ...prev, [entry.apiTitle]: entry.swaggerParams }));
+            }
+            if (entry.response) setEpResponses(prev => ({ ...prev, [entry.key]: entry.response }));
+            setTab('scan');
+            flash(`Restored: ${entry.method?.toUpperCase()} ${entry.path}`);
+          }}
+        />
+      )}
+
+    </div>
+  );
+}

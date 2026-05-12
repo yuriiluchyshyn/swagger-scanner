@@ -1,0 +1,46 @@
+{
+  "manifest_version": 3,
+  "name": "OpenAPI Scanner",
+  "version": "1.0.0",
+  "description": "OpenAPI Scanner in a modal window",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "http://localhost:*/*",
+    "https://*/*"
+  ],
+  "icons": {
+    "16": "icon.svg",
+    "32": "icon.svg",
+    "48": "icon.svg",
+    "128": "icon.svg"
+  },
+  "action": {
+    "default_title": "Open OpenAPI Scanner",
+    "default_icon": {
+      "16": "icon.svg",
+      "32": "icon.svg",
+      "48": "icon.svg",
+      "128": "icon.svg"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "css": ["modal.css"]
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["modal.html", "modal.css"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

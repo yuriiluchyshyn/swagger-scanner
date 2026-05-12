@@ -1,0 +1,33 @@
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1f6feb;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0969da;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background circle -->
+  <circle cx="64" cy="64" r="60" fill="url(#grad)" stroke="#ffffff" stroke-width="4"/>
+  
+  <!-- API symbol -->
+  <g fill="white" stroke="white" stroke-width="2">
+    <!-- Left bracket -->
+    <path d="M35 45 L25 45 L25 83 L35 83" stroke-linecap="round" stroke-linejoin="round"/>
+    
+    <!-- Right bracket -->
+    <path d="M93 45 L103 45 L103 83 L93 83" stroke-linecap="round" stroke-linejoin="round"/>
+    
+    <!-- Center dots representing endpoints -->
+    <circle cx="50" cy="55" r="3" fill="white"/>
+    <circle cx="64" cy="55" r="3" fill="white"/>
+    <circle cx="78" cy="55" r="3" fill="white"/>
+    
+    <circle cx="50" cy="70" r="3" fill="white"/>
+    <circle cx="64" cy="70" r="3" fill="white"/>
+    <circle cx="78" cy="70" r="3" fill="white"/>
+    
+    <!-- Magnifying glass -->
+    <circle cx="75" cy="85" r="8" fill="none" stroke="white" stroke-width="3"/>
+    <line x1="81" y1="91" x2="88" y2="98" stroke="white" stroke-width="3" stroke-linecap="round"/>
+  </g>
+</svg>
